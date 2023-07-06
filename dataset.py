@@ -41,10 +41,8 @@ class ModelDataset:
     @torch.no_grad()
     def run_model(self, batch):
         toks = batch["tokens"].to(self.device)
-        self.model.run_with_hooks(
-            toks,
-            fwd_hooks=self.fwd_hooks,
-        )
+        with self.model.hooks(fwd_hooks=self.fwd_hooks):
+            self.model(toks, stop_at_layer=self.layer_idx+1)
     
     def __iter__(self):
         for batch in self.data_loader:
