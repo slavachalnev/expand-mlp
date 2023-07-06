@@ -46,6 +46,9 @@ writer = SummaryWriter()
 num_steps = 10000
 for batch_idx, (pre, post) in tqdm.tqdm(enumerate(model_dataset), total=num_steps):
     # pre and post have shape (batch_size * seq_len, d_model)
+    # add noise to input
+    pre = pre + torch.rand_like(pre) * 1e-3
+
     for mlp, optimizer in zip(mlps, optimizers):
         optimizer.zero_grad()
         y = mlp(pre)
