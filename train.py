@@ -1,6 +1,8 @@
 from datasets import load_dataset
 import torch
 
+from torch.utils.tensorboard import SummaryWriter
+
 from transformer_lens.utils import tokenize_and_concatenate
 from transformer_lens import HookedTransformer
 
@@ -37,9 +39,11 @@ mlp4x = GeluMLP(
 mlps = [mlp1x, mlp2x, mlp4x]
 optimizers = [torch.optim.AdamW(mlp.parameters(), lr=1e-3) for mlp in mlps]
 
-for idx, (pre, post) in enumerate(model_dataset):
+writer = SummaryWriter()
+
+for batch_idx, (pre, post) in enumerate(model_dataset):
     # pre and post have shape (batch_size * seq_len, d_model)
-    print(f"Batch {idx}")
+    print(f"Batch {batch_idx}")
 
     for mlp, optimizer in zip(mlps, optimizers):
         optimizer.zero_grad()
@@ -48,4 +52,6 @@ for idx, (pre, post) in enumerate(model_dataset):
         loss.backward()
         optimizer.step()
         print(loss.item())
+        writer.add_scalar(f"loss/{mlp.hidden_size}", loss.item(), batch_idx)
 
+writer.close()
