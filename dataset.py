@@ -8,7 +8,7 @@ from transformer_lens.utils import tokenize_and_concatenate
 class ModelDataset:
     """Dataset of pre and post MLP activations"""
 
-    def __init__(self, model, layer_idx, batch_size, device, dataset):
+    def __init__(self, model, layer_idx, dataset, batch_size, device):
         self.model = model # HookedTransformer
         self.d_model = model.cfg.d_model
         self.layer_idx = layer_idx
@@ -25,23 +25,24 @@ class ModelDataset:
             h = value.detach().clone()
             h = h.reshape(-1, self.d_model)
             self.pre_h = h
-            return h
+            return value
         
         def post_hook(value, hook):
             h = value.detach().clone()
             h = h.reshape(-1, self.d_model)
             self.post_h = h
-            return h
+            return value
 
         self.fwd_hooks = [
-            (f"blocks.{layer_idx}.ln2.hook_normalized)", pre_hook),
+            (f"blocks.{layer_idx}.ln2.hook_normalized", pre_hook),
             (f"blocks.{layer_idx}.hook_mlp_out", post_hook),
             ]
 
     @torch.no_grad()
     def run_model(self, batch):
+        toks = batch["tokens"].to(self.device)
         self.model.run_with_hooks(
-            batch["tokens"].to(self.device),
+            toks,
             fwd_hooks=self.fwd_hooks,
         )
     
