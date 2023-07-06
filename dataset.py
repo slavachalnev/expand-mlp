@@ -45,10 +45,8 @@ class ModelDataset:
             self.model(toks, stop_at_layer=self.layer_idx+1)
     
     def __iter__(self):
-        for batch in self.data_loader:
-            self.run_model(batch)
-            yield self.pre_h, self.post_h
+        while True:
+            for batch in self.data_loader:
+                self.run_model(batch)
+                yield self.pre_h, self.post_h
         
-    def __len__(self):
-        return len(self.data_loader)
-    

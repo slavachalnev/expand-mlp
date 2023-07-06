@@ -41,6 +41,7 @@ optimizers = [torch.optim.AdamW(mlp.parameters(), lr=1e-3) for mlp in mlps]
 
 writer = SummaryWriter()
 
+num_steps = 10000
 for batch_idx, (pre, post) in enumerate(model_dataset):
     # pre and post have shape (batch_size * seq_len, d_model)
     print(f"Batch {batch_idx}")
@@ -53,5 +54,14 @@ for batch_idx, (pre, post) in enumerate(model_dataset):
         optimizer.step()
         print(loss.item())
         writer.add_scalar(f"loss/{mlp.hidden_size}", loss.item(), batch_idx)
+    
+    if batch_idx > num_steps:
+        print("Done")
+        break
+
+# save
+for mlp in mlps:
+    torch.save(mlp.state_dict(), f"mlps/mlp_{mlp.hidden_size}.pt")
+
 
 writer.close()
