@@ -6,6 +6,8 @@ from torch.utils.tensorboard import SummaryWriter
 from transformer_lens.utils import tokenize_and_concatenate
 from transformer_lens import HookedTransformer
 
+import tqdm
+
 from dataset import ModelDataset
 from mlp import GeluMLP
 
@@ -42,17 +44,14 @@ optimizers = [torch.optim.AdamW(mlp.parameters(), lr=1e-3) for mlp in mlps]
 writer = SummaryWriter()
 
 num_steps = 10000
-for batch_idx, (pre, post) in enumerate(model_dataset):
+for batch_idx, (pre, post) in tqdm.tqdm(enumerate(model_dataset), total=num_steps):
     # pre and post have shape (batch_size * seq_len, d_model)
-    print(f"Batch {batch_idx}")
-
     for mlp, optimizer in zip(mlps, optimizers):
         optimizer.zero_grad()
         y = mlp(pre)
         loss = torch.nn.functional.mse_loss(y, post)
         loss.backward()
         optimizer.step()
-        print(loss.item())
         writer.add_scalar(f"loss/{mlp.hidden_size}", loss.item(), batch_idx)
     
     if batch_idx > num_steps:
@@ -62,6 +61,5 @@ for batch_idx, (pre, post) in enumerate(model_dataset):
 # save
 for mlp in mlps:
     torch.save(mlp.state_dict(), f"mlps/mlp_{mlp.hidden_size}.pt")
-
 
 writer.close()
