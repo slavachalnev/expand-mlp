@@ -39,23 +39,28 @@ mlp4x = GeluMLP(
     output_size=model.cfg.d_model,
     ).to(device)
 
+num_steps = 20000
 mlps = [mlp1x, mlp2x, mlp4x]
 optimizers = [torch.optim.AdamW(mlp.parameters(), lr=2e-4) for mlp in mlps]
+schedulers = [torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps) for optimizer in optimizers]
 
 writer = SummaryWriter()
 
-num_steps = 10000
 for batch_idx, (pre, post) in tqdm.tqdm(enumerate(model_dataset), total=num_steps):
     # pre and post have shape (batch_size * seq_len, d_model)
     # add noise to input
-    pre = pre + torch.rand_like(pre) * 1e-2
+    pre = pre + torch.rand_like(pre) * 0.01
+    post = post + torch.rand_like(post) * 0.001
 
-    for mlp, optimizer in zip(mlps, optimizers):
+    for mlp, optimizer, scheduler in zip(mlps, optimizers, schedulers):
         optimizer.zero_grad()
         y = mlp(pre)
         loss = torch.nn.functional.mse_loss(y, post)
         loss.backward()
+
         optimizer.step()
+        scheduler.step()
+
         writer.add_scalar(f"loss/{mlp.hidden_size}", loss.item(), batch_idx)
     
     if batch_idx > num_steps:
