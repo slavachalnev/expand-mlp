@@ -19,7 +19,8 @@ model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
 text_data = load_dataset("openwebtext", split="train[:10%]")
 text_dataset = tokenize_and_concatenate(text_data, model.tokenizer)
 
-model_dataset = ModelDataset(model, layer_idx=1, dataset=text_dataset, batch_size=8, device=device)
+layer_idx = 2
+model_dataset = ModelDataset(model, layer_idx=layer_idx, dataset=text_dataset, batch_size=8, device=device)
 
 mlp1x = GeluMLP(
     input_size=model.cfg.d_model,
@@ -41,7 +42,7 @@ mlp4x = GeluMLP(
 
 num_steps = 20000
 mlps = [mlp1x, mlp2x, mlp4x]
-optimizers = [torch.optim.AdamW(mlp.parameters(), lr=2e-4) for mlp in mlps]
+optimizers = [torch.optim.AdamW(mlp.parameters(), lr=5e-4) for mlp in mlps]
 schedulers = [torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps) for optimizer in optimizers]
 
 writer = SummaryWriter()
@@ -61,7 +62,7 @@ for batch_idx, (pre, post) in tqdm.tqdm(enumerate(model_dataset), total=num_step
         optimizer.step()
         scheduler.step()
 
-        writer.add_scalar(f"loss/{mlp.hidden_size}", loss.item(), batch_idx)
+        writer.add_scalar(f"loss_layer{layer_idx}/{mlp.hidden_size}", loss.item(), batch_idx)
     
     if batch_idx > num_steps:
         print("Done")
