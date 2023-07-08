@@ -13,13 +13,14 @@ from mlp import GeluMLP
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
+# model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
+model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
 
 # text_data = load_dataset("NeelNanda/pile-10k", split="train")
 text_data = load_dataset("openwebtext", split="train[:10%]")
 text_dataset = tokenize_and_concatenate(text_data, model.tokenizer)
 
-layer_idx = 2
+layer_idx = 1
 model_dataset = ModelDataset(model, layer_idx=layer_idx, dataset=text_dataset, batch_size=8, device=device)
 
 mlp1x = GeluMLP(
@@ -40,9 +41,9 @@ mlp4x = GeluMLP(
     output_size=model.cfg.d_model,
     ).to(device)
 
-num_steps = 30000
+num_steps = 40000
 mlps = [mlp1x, mlp2x, mlp4x]
-optimizers = [torch.optim.AdamW(mlp.parameters(), lr=5e-4) for mlp in mlps]
+optimizers = [torch.optim.AdamW(mlp.parameters(), lr=1e-4) for mlp in mlps]
 schedulers = [torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps) for optimizer in optimizers]
 
 writer = SummaryWriter()
@@ -50,8 +51,8 @@ writer = SummaryWriter()
 for batch_idx, (pre, post) in tqdm.tqdm(enumerate(model_dataset), total=num_steps):
     # pre and post have shape (batch_size * seq_len, d_model)
     # add noise to input
-    pre = pre + torch.rand_like(pre) * 0.1
-    post = post + torch.rand_like(post) * 0.001
+    pre = pre + torch.randn_like(pre) * 0.01
+    # post = post + torch.randn_like(post) * 0.001
 
     for mlp, optimizer, scheduler in zip(mlps, optimizers, schedulers):
         optimizer.zero_grad()
