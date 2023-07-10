@@ -1,5 +1,6 @@
 # %%
 import os
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -16,6 +17,8 @@ dataset_config = FeatureDatasetConfig(
     n_sequences=1000,
 )
 ngram_ds = BigramFeatureDataset('ngram').load(dataset_config)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
 tokenizer = model.tokenizer
@@ -40,19 +43,20 @@ for mlp_state_dict in mlp_state_dicts:
         output_size=model.cfg.d_model,
         )
     mlp.load_state_dict(mlp_state_dict)
+    mlp.to(device)
     mlps.append(mlp)
 
 
 mlp_inputs = None
 def inputs_hook(value, hook):
-    h = value.detach().clone()
+    h = value.detach().clone().cpu()
     global mlp_inputs
     mlp_inputs = h[:, -1, :]
     return value
 
 mlp_hidden = None
 def hidden_hook(value, hook):
-    h = value.detach().clone()
+    h = value.detach().clone().cpu()
     global mlp_hidden
     mlp_hidden = h[:, -1, :]
     return value
@@ -69,14 +73,14 @@ for h_size in [8192, 16384, 32768]:
 counts = torch.zeros((3,))
 
 with model.hooks(fwd_hooks=hooks), torch.no_grad():
-    for i, item in enumerate(ngram_ds):
+    for i, item in tqdm(enumerate(ngram_ds)):
         label_idx = label_to_idx[item['label']]
         counts[label_idx] += 1
 
         model.forward(item['tokens'].unsqueeze(0), stop_at_layer=layer+1)
 
         for mlp_i, mlp in enumerate(mlps):
-            h = mlp.forward(mlp_inputs, return_pre_act=True).squeeze(0)
+            h = mlp.forward(mlp_inputs.to(device), return_pre_act=True).squeeze(0).cpu()
             act_sums[mlp_i][:, label_idx] += h
 
 act_means = [act_sum / counts for act_sum in act_sums]
@@ -95,13 +99,13 @@ for act_mean in act_means:
 neuron_activations = [[[[] for _ in range(3)] for _ in range(5)] for _ in range(len(top_neuron_idxs))]
 
 with model.hooks(fwd_hooks=hooks), torch.no_grad():
-    for i, item in enumerate(ngram_ds):
+    for i, item in tqdm(enumerate(ngram_ds)):
         label_idx = label_to_idx[item['label']]
 
         model.forward(item['tokens'].unsqueeze(0), stop_at_layer=layer+1)
 
         for mlp_i, mlp in enumerate(mlps):
-            h = mlp.forward(mlp_inputs, return_pre_act=True).squeeze(0)
+            h = mlp.forward(mlp_inputs.to(device), return_pre_act=True).squeeze(0).cpu()
             for idx, neuron_idx in enumerate(top_neuron_idxs[mlp_i][:5]):  # only take the top 5 neurons
                 neuron_activations[mlp_i][idx][label_idx].append(h[neuron_idx].item())  # save the activation of top neurons
 
