@@ -33,7 +33,7 @@ COMPOUND_WORDS = [
 
 
 class BigramFeatureDataset:
-    def __init__(self, name, features):
+    def __init__(self, name, features=COMPOUND_WORDS):
         self.name = name
         self.features = features
 
