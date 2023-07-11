@@ -51,7 +51,7 @@ writer = SummaryWriter()
 for batch_idx, (pre, post) in tqdm.tqdm(enumerate(model_dataset), total=num_steps):
     # pre and post have shape (batch_size * seq_len, d_model)
     # add noise to input
-    pre = pre + torch.randn_like(pre) * 0.01
+    pre = pre + torch.randn_like(pre) * 0.1
     # post = post + torch.randn_like(post) * 0.001
 
     for mlp, optimizer, scheduler in zip(mlps, optimizers, schedulers):

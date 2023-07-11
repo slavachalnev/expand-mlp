@@ -4,6 +4,10 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn.functional as F
+
+from sklearn.linear_model import LogisticRegression
+
 from ngram_ds import BigramFeatureDataset, FeatureDatasetConfig
 from mlp import GeluMLP
 
@@ -81,6 +85,7 @@ with model.hooks(fwd_hooks=hooks), torch.no_grad():
 
         for mlp_i, mlp in enumerate(mlps):
             h = mlp.forward(mlp_inputs.to(device), return_pre_act=True).squeeze(0).cpu()
+            h = F.gelu(h)
             act_sums[mlp_i][:, label_idx] += h
 
 act_means = [act_sum / counts for act_sum in act_sums]
@@ -88,15 +93,12 @@ act_means = [act_sum / counts for act_sum in act_sums]
 # get top 10 neurons by largest difference between ngram types
 top_neuron_idxs = []
 for act_mean in act_means:
-    diffs = act_mean[:, 0] - 0.5 * (act_mean[:, 1] + act_mean[:, 2])
+    diffs = act_mean[:, 0] - torch.max(act_mean[:, 1], act_mean[:, 2])
     top_neuron_idxs.append(diffs.argsort(descending=True)[:10])  # get top 10 neurons
     print(diffs[top_neuron_idxs[-1]])
 
-
-# record neuron activations for top neurons
-
 # Prepare empty lists to store neuron activations
-neuron_activations = [[[[] for _ in range(3)] for _ in range(5)] for _ in range(len(top_neuron_idxs))]
+neuron_activations = [[[[] for _ in range(3)] for _ in range(10)] for _ in range(len(top_neuron_idxs))]
 
 with model.hooks(fwd_hooks=hooks), torch.no_grad():
     for i, item in tqdm(enumerate(ngram_ds)):
@@ -106,8 +108,27 @@ with model.hooks(fwd_hooks=hooks), torch.no_grad():
 
         for mlp_i, mlp in enumerate(mlps):
             h = mlp.forward(mlp_inputs.to(device), return_pre_act=True).squeeze(0).cpu()
-            for idx, neuron_idx in enumerate(top_neuron_idxs[mlp_i][:5]):  # only take the top 5 neurons
+            for idx, neuron_idx in enumerate(top_neuron_idxs[mlp_i]):
                 neuron_activations[mlp_i][idx][label_idx].append(h[neuron_idx].item())  # save the activation of top neurons
+
+
+# Training a classifier for each neuron and recording the accuracy
+classifier_accuracies = [[0 for _ in range(10)] for _ in range(len(top_neuron_idxs))]
+for mlp_i in range(len(mlps)):
+    for neuron_i in range(len(top_neuron_idxs[mlp_i])):
+        # Preparing the data
+        X = neuron_activations[mlp_i][neuron_i][0] + neuron_activations[mlp_i][neuron_i][1] + neuron_activations[mlp_i][neuron_i][2]
+        y = [0]*len(neuron_activations[mlp_i][neuron_i][0]) + [1]*(len(neuron_activations[mlp_i][neuron_i][1]) + len(neuron_activations[mlp_i][neuron_i][2]))
+
+        # Training the classifier
+        clf = LogisticRegression(random_state=42).fit(np.array(X).reshape(-1, 1), y)
+
+        # Recording the accuracy
+        classifier_accuracies[mlp_i][neuron_i] = clf.score(np.array(X).reshape(-1, 1), y)
+
+# Re-ranking neurons by classifier accuracy
+top_neuron_idxs_ranked = [sorted(range(len(accs)), key=lambda i: -accs[i])[:5] for accs in classifier_accuracies]  # get top 5 neurons
+
 
 # %%
 
@@ -119,16 +140,20 @@ overall_max = max([max([max(act) for act in neuron]) for mlp in neuron_activatio
 n_bins = 30
 bins = np.linspace(overall_min, overall_max, n_bins)
 
-# Plotting the histograms
 fig, axs = plt.subplots(len(mlps)*5, 1, figsize=(10, 5 * len(mlps) * 5))
 labels = ['bigram', 'missing_first', 'missing_second']
 
-for i, neuron_label_activations in enumerate(neuron_activations):
-    for j, label_activations in enumerate(neuron_label_activations):
-        for k, activations in enumerate(label_activations):
-            axs[i*5+j].hist(activations, bins=bins, alpha=0.5, label=labels[k])
-        axs[i*5+j].set_title(f'Activations of Top Neuron {j+1} for MLP {i+1}')
-        axs[i*5+j].legend()
+# # Sort MLPs by top neuron indices
+# sorted_neurons_idxs = [np.argsort(neuron_scores)[::-1] for neuron_scores in scores]  # sorting neuron indices by scores
+
+for mlp_i, mlp in enumerate(neuron_activations):
+    for j in range(5):  # only take the top 5 neurons
+        neuron_i = top_neuron_idxs_ranked[mlp_i][j]
+        for label_idx in range(3):
+            activations = mlp[neuron_i][label_idx]
+            axs[mlp_i*5+j].hist(activations, bins=bins, alpha=0.5, label=labels[label_idx])
+        axs[mlp_i*5+j].set_title(f'Activations of Top Neuron {j+1} for MLP {mlp_i+1} (Neuron index: {neuron_i})')
+        axs[mlp_i*5+j].legend()
 
 plt.tight_layout()
 plt.savefig('activations.png')
