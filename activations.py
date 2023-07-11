@@ -34,7 +34,7 @@ label_to_idx = {
     'missing_second': 2,
     }
 
-mlps_dir = 'odin/mlps'
+mlps_dir = 'mlps'
 layer = 1
 mlp_names = [f'mlp_8192_layer_{layer}.pt', f'mlp_16384_layer_{layer}.pt', f'mlp_32768_layer_{layer}.pt']
 mlp_state_dicts = [torch.load(os.path.join(mlps_dir, mlp_name), map_location='cpu') for mlp_name in mlp_names]
@@ -143,7 +143,7 @@ overall_min = min([min([min(act) for act in neuron]) for mlp in neuron_activatio
 overall_max = max([max([max(act) for act in neuron]) for mlp in neuron_activations for neuron in mlp])
 
 # Compute bins
-n_bins = 30
+n_bins = 50
 bins = np.linspace(overall_min, overall_max, n_bins)
 
 fig, axs = plt.subplots(len(mlps)*5, 1, figsize=(10, 5 * len(mlps) * 5))
