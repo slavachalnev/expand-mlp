@@ -128,6 +128,12 @@ for mlp_i in range(len(mlps)):
 
 # Re-ranking neurons by classifier accuracy
 top_neuron_idxs_ranked = [sorted(range(len(accs)), key=lambda i: -accs[i])[:5] for accs in classifier_accuracies]  # get top 5 neurons
+neuron_activations_ranked = []
+for mlp_i in range(len(mlps)):
+    neuron_activations_ranked.append([])
+    for neuron_i in range(len(top_neuron_idxs[mlp_i])):
+        neuron_activations_ranked[mlp_i].append(neuron_activations[mlp_i][top_neuron_idxs_ranked[mlp_i][neuron_i]])
+neuron_activations = neuron_activations_ranked
 
 
 # %%
@@ -143,17 +149,12 @@ bins = np.linspace(overall_min, overall_max, n_bins)
 fig, axs = plt.subplots(len(mlps)*5, 1, figsize=(10, 5 * len(mlps) * 5))
 labels = ['bigram', 'missing_first', 'missing_second']
 
-# # Sort MLPs by top neuron indices
-# sorted_neurons_idxs = [np.argsort(neuron_scores)[::-1] for neuron_scores in scores]  # sorting neuron indices by scores
-
-for mlp_i, mlp in enumerate(neuron_activations):
-    for j in range(5):  # only take the top 5 neurons
-        neuron_i = top_neuron_idxs_ranked[mlp_i][j]
-        for label_idx in range(3):
-            activations = mlp[neuron_i][label_idx]
-            axs[mlp_i*5+j].hist(activations, bins=bins, alpha=0.5, label=labels[label_idx])
-        axs[mlp_i*5+j].set_title(f'Activations of Top Neuron {j+1} for MLP {mlp_i+1} (Neuron index: {neuron_i})')
-        axs[mlp_i*5+j].legend()
+for i, neuron_label_activations in enumerate(neuron_activations):
+    for j, label_activations in enumerate(neuron_label_activations):
+        for k, activations in enumerate(label_activations):
+            axs[i*5+j].hist(activations, bins=bins, alpha=0.5, label=labels[k])
+        axs[i*5+j].set_title(f'Activations of Top Neuron {j+1} for MLP {i+1}')
+        axs[i*5+j].legend()
 
 plt.tight_layout()
 plt.savefig('activations.png')
