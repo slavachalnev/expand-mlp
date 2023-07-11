@@ -90,15 +90,16 @@ with model.hooks(fwd_hooks=hooks), torch.no_grad():
 
 act_means = [act_sum / counts for act_sum in act_sums]
 
-# get top 10 neurons by largest difference between ngram types
+n_pre_sort = 100
+# get top n_pre_sort neurons by largest difference between ngram types
 top_neuron_idxs = []
 for act_mean in act_means:
     diffs = act_mean[:, 0] - torch.max(act_mean[:, 1], act_mean[:, 2])
-    top_neuron_idxs.append(diffs.argsort(descending=True)[:10])  # get top 10 neurons
+    top_neuron_idxs.append(diffs.argsort(descending=True)[:n_pre_sort])  # get top neurons
     print(diffs[top_neuron_idxs[-1]])
 
 # Prepare empty lists to store neuron activations
-neuron_activations = [[[[] for _ in range(3)] for _ in range(10)] for _ in range(len(top_neuron_idxs))]
+neuron_activations = [[[[] for _ in range(3)] for _ in range(n_pre_sort)] for _ in range(len(top_neuron_idxs))]
 
 with model.hooks(fwd_hooks=hooks), torch.no_grad():
     for i, item in tqdm(enumerate(ngram_ds)):
@@ -113,7 +114,7 @@ with model.hooks(fwd_hooks=hooks), torch.no_grad():
 
 
 # Training a classifier for each neuron and recording the accuracy
-classifier_accuracies = [[0 for _ in range(10)] for _ in range(len(top_neuron_idxs))]
+classifier_accuracies = [[0 for _ in range(n_pre_sort)] for _ in range(len(top_neuron_idxs))]
 for mlp_i in range(len(mlps)):
     for neuron_i in range(len(top_neuron_idxs[mlp_i])):
         # Preparing the data
