@@ -131,8 +131,8 @@ top_neuron_idxs_ranked = [sorted(range(len(accs)), key=lambda i: -accs[i])[:5] f
 neuron_activations_ranked = []
 for mlp_i in range(len(mlps)):
     neuron_activations_ranked.append([])
-    for neuron_i in range(len(top_neuron_idxs[mlp_i])):
-        neuron_activations_ranked[mlp_i].append(neuron_activations[mlp_i][top_neuron_idxs_ranked[mlp_i][neuron_i]])
+    for neuron_i in top_neuron_idxs_ranked[mlp_i]:
+        neuron_activations_ranked[mlp_i].append(neuron_activations[mlp_i][neuron_i])
 neuron_activations = neuron_activations_ranked
 
 
