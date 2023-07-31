@@ -118,8 +118,11 @@ classifier_accuracies = [[0 for _ in range(n_pre_sort)] for _ in range(len(top_n
 for mlp_i in range(len(mlps)):
     for neuron_i in range(len(top_neuron_idxs[mlp_i])):
         # Preparing the data
-        X = neuron_activations[mlp_i][neuron_i][0] + neuron_activations[mlp_i][neuron_i][1] + neuron_activations[mlp_i][neuron_i][2]
-        y = [0]*len(neuron_activations[mlp_i][neuron_i][0]) + [1]*(len(neuron_activations[mlp_i][neuron_i][1]) + len(neuron_activations[mlp_i][neuron_i][2]))
+        X = neuron_activations[mlp_i][neuron_i][0] + \
+            neuron_activations[mlp_i][neuron_i][1] + \
+            neuron_activations[mlp_i][neuron_i][2]
+        y = [0]*len(neuron_activations[mlp_i][neuron_i][0]) + \
+            [1]*(len(neuron_activations[mlp_i][neuron_i][1]) + len(neuron_activations[mlp_i][neuron_i][2]))
 
         # Training the classifier
         clf = LogisticRegression(random_state=42).fit(np.array(X).reshape(-1, 1), y)
