@@ -1,3 +1,5 @@
+from typing import List
+
 from datasets import load_dataset
 import torch
 
@@ -9,10 +11,19 @@ from transformer_lens import HookedTransformer
 import tqdm
 
 from dataset import ModelDataset
-from mlp import GeluMLP
+from mlp import GeluMLP, SoluMLP
 
 
-def train_models(layer_idx, hs_multiples, num_steps, device, pre_noise=0.0, post_noise=0.0, hidden_noise=0.0):
+def train_models(
+        layer_idx: int,
+        hs_multiples: List[int],
+        mlp_type: str, # 'gelu' or 'solu'
+        num_steps: int,
+        device,
+        pre_noise=0.0,
+        post_noise=0.0,
+        hidden_noise=0.0,
+        ):
     # model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
     model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
 
@@ -22,7 +33,14 @@ def train_models(layer_idx, hs_multiples, num_steps, device, pre_noise=0.0, post
 
     model_dataset = ModelDataset(model, layer_idx=layer_idx, dataset=text_dataset, batch_size=8, device=device)
 
-    mlps = [GeluMLP(input_size=model.cfg.d_model,
+    if mlp_type == 'gelu':
+        mlp_class = GeluMLP
+    elif mlp_type == 'solu':
+        mlp_class = SoluMLP
+    else:
+        raise ValueError(f"mlp_type must be 'gelu' or 'solu', got {mlp_type}")
+    
+    mlps = [mlp_class(input_size=model.cfg.d_model,
                     hidden_size=hs*4*model.cfg.d_model,
                     output_size=model.cfg.d_model).to(device)
             for hs in hs_multiples]
@@ -61,4 +79,17 @@ def train_models(layer_idx, hs_multiples, num_steps, device, pre_noise=0.0, post
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     num_steps = 40000
-    train_models()
+    hs_multiples = [1, 2, 4, 8]
+
+    for layer_idx in range(1, 4):
+        train_models(
+            layer_idx,
+            hs_multiples=hs_multiples,
+            mlp_type='gelu',
+            num_steps=num_steps,
+            device=device,
+            pre_noise=0.0,
+            post_noise=0.0,
+            hidden_noise=0.0,
+        )
+
