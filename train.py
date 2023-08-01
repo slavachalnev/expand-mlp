@@ -1,5 +1,10 @@
 from typing import List
 
+import datetime
+import os
+import json
+import tqdm
+
 from datasets import load_dataset
 import torch
 
@@ -8,10 +13,17 @@ from torch.utils.tensorboard import SummaryWriter
 from transformer_lens.utils import tokenize_and_concatenate
 from transformer_lens import HookedTransformer
 
-import tqdm
-
 from dataset import ModelDataset
 from mlp import GeluMLP, SoluMLP
+
+
+def save_parameters(save_dir: str, params: dict):
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    # Save training parameters to a json file
+    with open(f"{save_dir}/params.json", "w") as f:
+        json.dump(params, f)
 
 
 def train_models(
@@ -20,10 +32,12 @@ def train_models(
         mlp_type: str, # 'gelu' or 'solu'
         num_steps: int,
         device,
+        save_dir: str = 'mlps',
         pre_noise=0.0,
         post_noise=0.0,
         hidden_noise=0.0,
         ):
+
     # model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
     model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
 
@@ -72,24 +86,31 @@ def train_models(
 
     # save
     for mlp in mlps:
-        torch.save(mlp.state_dict(), f"mlps/mlp_{mlp.hidden_size}_layer_{layer_idx}.pt")
+        torch.save(mlp.state_dict(), f"{save_dir}/mlp_{mlp.hidden_size}_layer_{layer_idx}.pt")
 
     writer.close()
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    num_steps = 40000
     hs_multiples = [1, 2, 4, 8]
 
     for layer_idx in range(1, 4):
-        train_models(
-            layer_idx,
-            hs_multiples=hs_multiples,
-            mlp_type='gelu',
-            num_steps=num_steps,
-            device=device,
-            pre_noise=0.0,
-            post_noise=0.0,
-            hidden_noise=0.0,
-        )
+        # Create a time-stamped directory for this run
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_dir = f"mlps/{timestamp}"
+        
+        # Create a dictionary of parameters
+        params = {
+            'layer_idx': layer_idx,
+            'hs_multiples': hs_multiples,
+            'mlp_type': 'gelu',
+            'num_steps': 40000,
+            'device': str(device),
+            'pre_noise': 0.0,
+            'post_noise': 0.0,
+            'hidden_noise': 0.0,
+            'save_dir': save_dir,
+        }
 
+        save_parameters(save_dir, params)
+        train_models(**params)
