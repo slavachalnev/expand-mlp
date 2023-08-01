@@ -12,11 +12,14 @@ class GeluMLP(nn.Module):
         self.fc2 = nn.Linear(hidden_size, output_size)
         self.activation = nn.GELU()
     
-    def forward(self, x, return_pre_act=False, return_post_act=False):
+    def forward(self, x, return_pre_act=False, return_post_act=False, hidden_noise=0.0):
         h = self.fc1(x)
 
         if return_pre_act:
             return h
+        
+        if hidden_noise > 0.0:
+            h = h + torch.randn_like(h) * hidden_noise
 
         h = self.activation(h)
 
