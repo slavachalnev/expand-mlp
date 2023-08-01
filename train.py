@@ -1,9 +1,9 @@
 from typing import List
 
-import datetime
 import os
 import json
 import tqdm
+from datetime import datetime
 
 from datasets import load_dataset
 import torch
@@ -106,9 +106,9 @@ if __name__ == "__main__":
             'mlp_type': 'gelu',
             'num_steps': 40000,
             'device': str(device),
-            'pre_noise': 0.0,
+            'pre_noise': 0.01,
             'post_noise': 0.0,
-            'hidden_noise': 0.0,
+            'hidden_noise': 0.01,
             'save_dir': save_dir,
         }
 
