@@ -12,65 +12,53 @@ from dataset import ModelDataset
 from mlp import GeluMLP
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
-model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
+def train_models(layer_idx, hs_multiples, num_steps, device, pre_noise=0.0, post_noise=0.0, hidden_noise=0.0):
+    # model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
+    model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
 
-# text_data = load_dataset("NeelNanda/pile-10k", split="train")
-text_data = load_dataset("openwebtext", split="train[:10%]")
-text_dataset = tokenize_and_concatenate(text_data, model.tokenizer)
+    # text_data = load_dataset("NeelNanda/pile-10k", split="train")
+    text_data = load_dataset("openwebtext", split="train[:10%]")
+    text_dataset = tokenize_and_concatenate(text_data, model.tokenizer)
 
-layer_idx = 1
-model_dataset = ModelDataset(model, layer_idx=layer_idx, dataset=text_dataset, batch_size=8, device=device)
+    model_dataset = ModelDataset(model, layer_idx=layer_idx, dataset=text_dataset, batch_size=8, device=device)
 
-mlp1x = GeluMLP(
-    input_size=model.cfg.d_model,
-    hidden_size=1*4*model.cfg.d_model,
-    output_size=model.cfg.d_model,
-    ).to(device)
+    mlps = [GeluMLP(input_size=model.cfg.d_model,
+                    hidden_size=hs*4*model.cfg.d_model,
+                    output_size=model.cfg.d_model).to(device)
+            for hs in hs_multiples]
+    optimizers = [torch.optim.AdamW(mlp.parameters(), lr=1e-4) for mlp in mlps]
+    schedulers = [torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps) for optimizer in optimizers]
 
-mlp2x = GeluMLP(
-    input_size=model.cfg.d_model,
-    hidden_size=2*4*model.cfg.d_model,
-    output_size=model.cfg.d_model,
-    ).to(device)
+    writer = SummaryWriter()
 
-mlp4x = GeluMLP(
-    input_size=model.cfg.d_model,
-    hidden_size=4*4*model.cfg.d_model,
-    output_size=model.cfg.d_model,
-    ).to(device)
+    for batch_idx, (pre, post) in tqdm.tqdm(enumerate(model_dataset), total=num_steps):
+        # pre and post have shape (batch_size * seq_len, d_model)
+        # add noise to input
+        pre = pre + torch.randn_like(pre) * pre_noise
+        post = post + torch.randn_like(post) * post_noise
 
-num_steps = 40000
-mlps = [mlp1x, mlp2x, mlp4x]
-optimizers = [torch.optim.AdamW(mlp.parameters(), lr=1e-4) for mlp in mlps]
-schedulers = [torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps) for optimizer in optimizers]
+        for mlp, optimizer, scheduler in zip(mlps, optimizers, schedulers):
+            optimizer.zero_grad()
+            y = mlp(pre, hidden_noise=hidden_noise)
+            loss = torch.nn.functional.mse_loss(y, post)
+            loss.backward()
 
-writer = SummaryWriter()
+            optimizer.step()
+            scheduler.step()
 
-for batch_idx, (pre, post) in tqdm.tqdm(enumerate(model_dataset), total=num_steps):
-    # pre and post have shape (batch_size * seq_len, d_model)
-    # add noise to input
-    pre = pre + torch.randn_like(pre) * 0.1
-    # post = post + torch.randn_like(post) * 0.001
+            writer.add_scalar(f"loss_layer{layer_idx}/{mlp.hidden_size}", loss.item(), batch_idx)
+        
+        if batch_idx > num_steps:
+            print("Done")
+            break
 
-    for mlp, optimizer, scheduler in zip(mlps, optimizers, schedulers):
-        optimizer.zero_grad()
-        y = mlp(pre)
-        loss = torch.nn.functional.mse_loss(y, post)
-        loss.backward()
+    # save
+    for mlp in mlps:
+        torch.save(mlp.state_dict(), f"mlps/mlp_{mlp.hidden_size}_layer_{layer_idx}.pt")
 
-        optimizer.step()
-        scheduler.step()
+    writer.close()
 
-        writer.add_scalar(f"loss_layer{layer_idx}/{mlp.hidden_size}", loss.item(), batch_idx)
-    
-    if batch_idx > num_steps:
-        print("Done")
-        break
-
-# save
-for mlp in mlps:
-    torch.save(mlp.state_dict(), f"mlps/mlp_{mlp.hidden_size}_layer_{layer_idx}.pt")
-
-writer.close()
+if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    num_steps = 40000
+    train_models()
