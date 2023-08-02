@@ -59,18 +59,15 @@ def analyse_feature(
         mlps.append(mlp)
 
 
-    mlp_inputs = None
+    mlp_state = dict()
     def inputs_hook(value, hook):
         h = value.detach().clone().cpu()
-        global mlp_inputs
-        mlp_inputs = h[:, -1, :]
+        mlp_state['input'] = h[:, -1, :]
         return value
 
-    mlp_hidden = None
     def hidden_hook(value, hook):
         h = value.detach().clone().cpu()
-        global mlp_hidden
-        mlp_hidden = h[:, -1, :]
+        mlp_state['hidden'] = h[:, -1, :]
         return value
 
     hooks = [
@@ -92,7 +89,7 @@ def analyse_feature(
             model.forward(item['tokens'].unsqueeze(0), stop_at_layer=layer+1)
 
             for mlp_i, mlp in enumerate(mlps):
-                h = mlp.forward(mlp_inputs.to(device), return_post_act=True).squeeze(0).cpu()
+                h = mlp.forward(mlp_state['input'].to(device), return_post_act=True).squeeze(0).cpu()
                 act_sums[mlp_i][:, label_idx] += h
 
     act_means = [act_sum / counts for act_sum in act_sums]
@@ -114,7 +111,7 @@ def analyse_feature(
             model.forward(item['tokens'].unsqueeze(0), stop_at_layer=layer+1)
 
             for mlp_i, mlp in enumerate(mlps):
-                h = mlp.forward(mlp_inputs.to(device), return_pre_act=True).squeeze(0).cpu()
+                h = mlp.forward(mlp_state['input'].to(device), return_pre_act=True).squeeze(0).cpu()
                 for idx, neuron_idx in enumerate(top_neuron_idxs[mlp_i]):
                     neuron_activations[mlp_i][idx][label_idx].append(h[neuron_idx].item())  # save the activation of top neurons
     
@@ -172,7 +169,6 @@ def plot_hist(neuron_activations, feature_name, n_mlps=3, mlp_dir='mlps'):
             axs[i*5+j].legend()
 
     plt.tight_layout()
-    plt.savefig(f'{feature_name}_activations.png')
     plt.savefig(os.path.join(mlp_dir, f'{feature_name}_activations.png'))
     plt.show()
 
@@ -180,16 +176,16 @@ def plot_hist(neuron_activations, feature_name, n_mlps=3, mlp_dir='mlps'):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mlp-dir", default='mlps', type=str, help="Dir to load MLPs and save plots.")
-    parser.add_argument("--mlp-type", default='gelu', type=str, help="Type of MLP to use. 'gelu' or 'solu'.")
+    parser.add_argument("--mlp-type", default='gelu', type=str, help="Type of MLP to use. gelu or solu.")
     args = parser.parse_args()
 
     feature_names = [ # layer 1
         'magnetic-field',
-        'human-rights',
-        'north-america',
-        'gene-expression',
-        'mental-health',
-        'side-effects',
+        # 'human-rights',
+        # 'north-america',
+        # 'gene-expression',
+        # 'mental-health',
+        # 'side-effects',
         ]
     
     for feature_name in feature_names:
