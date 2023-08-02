@@ -1,4 +1,3 @@
-# %%
 import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -14,15 +13,21 @@ from mlp import GeluMLP
 from transformer_lens import HookedTransformer
 
 
-def analyse_feature(feature_name: str, n_pre_sort=100):
+def analyse_feature(
+        feature_name: str,
+        layer=1,
+        n_sequences=8000,
+        n_pre_sort=100,
+    ):
 
     dataset_config = FeatureDatasetConfig(
         dataset_name='NeelNanda/pile-10k',
         tokenizer_name='pythia',
         ctx_len=24,
-        n_sequences=1000,
+        n_sequences=n_sequences,
     )
     ngram_ds = BigramFeatureDataset('ngram').load(dataset_config)
+    filtered_dataset = list(filter(lambda x: x['feature_name'] == feature_name, ngram_ds))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -36,7 +41,6 @@ def analyse_feature(feature_name: str, n_pre_sort=100):
         }
 
     mlps_dir = 'mlps'
-    layer = 1
     mlp_names = [f'mlp_8192_layer_{layer}.pt', f'mlp_16384_layer_{layer}.pt', f'mlp_32768_layer_{layer}.pt']
     mlp_state_dicts = [torch.load(os.path.join(mlps_dir, mlp_name), map_location='cpu') for mlp_name in mlp_names]
 
@@ -78,7 +82,7 @@ def analyse_feature(feature_name: str, n_pre_sort=100):
     counts = torch.zeros((3,))
 
     with model.hooks(fwd_hooks=hooks), torch.no_grad():
-        for i, item in tqdm(enumerate(ngram_ds)):
+        for i, item in tqdm(enumerate(filtered_dataset)):
             label_idx = label_to_idx[item['label']]
             counts[label_idx] += 1
 
@@ -102,7 +106,7 @@ def analyse_feature(feature_name: str, n_pre_sort=100):
     neuron_activations = [[[[] for _ in range(3)] for _ in range(n_pre_sort)] for _ in range(len(top_neuron_idxs))]
 
     with model.hooks(fwd_hooks=hooks), torch.no_grad():
-        for i, item in tqdm(enumerate(ngram_ds)):
+        for i, item in tqdm(enumerate(filtered_dataset)):
             label_idx = label_to_idx[item['label']]
 
             model.forward(item['tokens'].unsqueeze(0), stop_at_layer=layer+1)
@@ -128,7 +132,7 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_ml
                 [1]*(len(neuron_activations[mlp_i][neuron_i][1]) + len(neuron_activations[mlp_i][neuron_i][2]))
 
             # Training the classifier
-            clf = LogisticRegression(random_state=42).fit(np.array(X).reshape(-1, 1), y)
+            clf = LogisticRegression(random_state=42, penalty=None).fit(np.array(X).reshape(-1, 1), y)
 
             # Recording the accuracy
             classifier_accuracies[mlp_i][neuron_i] = clf.score(np.array(X).reshape(-1, 1), y)
@@ -170,6 +174,19 @@ def plot_hist(neuron_activations, n_mlps=3):
     plt.show()
 
 
-neuron_activations, top_neuron_idxs = analyse_feature('magnetic-field')
-neuron_activations, top_neuron_idxs = rank_by_classifier(neuron_activations, top_neuron_idxs)
-plot_hist(neuron_activations)
+
+if __name__ == "__main__":
+
+    feature_names = [ # layer 1
+        'magnetic-field',
+        'human-rights',
+        'north-america',
+        'gene-expression',
+        'mental-health',
+        'side-effects',
+        ]
+
+    for feature_name in feature_names:
+        neuron_activations, top_neuron_idxs = analyse_feature(feature_name)
+        neuron_activations, top_neuron_idxs = rank_by_classifier(neuron_activations, top_neuron_idxs)
+        plot_hist(neuron_activations)
