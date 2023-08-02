@@ -24,7 +24,7 @@ def analyse_feature(
     ):
 
     dataset_config = FeatureDatasetConfig(
-        dataset_name='NeelNanda/pile-10k',
+        dataset_name=dataset_name,
         tokenizer_name='pythia',
         ctx_len=24,
         n_sequences=n_sequences,
