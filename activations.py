@@ -20,6 +20,7 @@ def analyse_feature(
         layer=1,
         n_sequences=8000,
         n_pre_sort=100,
+        dataset_name='NeelNanda/pile-10k',
     ):
 
     dataset_config = FeatureDatasetConfig(
@@ -194,6 +195,10 @@ if __name__ == "__main__":
     mlp_dir = args.mlp_dir
 
     for feature_name in feature_names:
-        neuron_activations, top_neuron_idxs = analyse_feature(feature_name, mlp_type=mlp_type, mlp_dir=mlp_dir)
+        neuron_activations, top_neuron_idxs = analyse_feature(feature_name,
+                                                              mlp_type=mlp_type,
+                                                              mlp_dir=mlp_dir,
+                                                              dataset_name='openwebtext',
+                                                              )
         neuron_activations, top_neuron_idxs = rank_by_classifier(neuron_activations, top_neuron_idxs)
         plot_hist(neuron_activations, feature_name, mlp_dir=mlp_dir)
