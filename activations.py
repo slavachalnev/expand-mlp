@@ -3,18 +3,18 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from sklearn.linear_model import LogisticRegression
 
 from ngram_ds import BigramFeatureDataset, FeatureDatasetConfig
-from mlp import GeluMLP
+from mlp import GeluMLP, SoluMLP
 
 from transformer_lens import HookedTransformer
 
 
 def analyse_feature(
         feature_name: str,
+        mlp_type: str = 'gelu', # 'gelu' or 'solu'
         layer=1,
         n_sequences=8000,
         n_pre_sort=100,
@@ -43,10 +43,11 @@ def analyse_feature(
     mlps_dir = 'mlps'
     mlp_names = [f'mlp_8192_layer_{layer}.pt', f'mlp_16384_layer_{layer}.pt', f'mlp_32768_layer_{layer}.pt']
     mlp_state_dicts = [torch.load(os.path.join(mlps_dir, mlp_name), map_location='cpu') for mlp_name in mlp_names]
+    mlp_class = GeluMLP if mlp_type == 'gelu' else SoluMLP
 
     mlps = []
     for mlp_state_dict in mlp_state_dicts:
-        mlp = GeluMLP(
+        mlp = mlp_class(
             input_size=model.cfg.d_model,
             hidden_size=mlp_state_dict['fc1.weight'].shape[0],
             output_size=model.cfg.d_model,
@@ -184,8 +185,10 @@ if __name__ == "__main__":
         'mental-health',
         'side-effects',
         ]
+    
+    mlp_type = 'gelu'
 
     for feature_name in feature_names:
-        neuron_activations, top_neuron_idxs = analyse_feature(feature_name)
+        neuron_activations, top_neuron_idxs = analyse_feature(feature_name, mlp_type=mlp_type)
         neuron_activations, top_neuron_idxs = rank_by_classifier(neuron_activations, top_neuron_idxs)
         plot_hist(neuron_activations, feature_name)
