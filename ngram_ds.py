@@ -15,20 +15,20 @@ COMPOUND_WORDS = [
     # ('blood', 'pressure'),
     # ('prime', 'factors'),
     # ('social', 'media'),
-    # ('gene', 'expression'),
+    ('gene', 'expression'),
     # ('control', 'group'),
     ('magnetic', 'field'),
     # ('cell', 'lines'),
     # ('trial', 'court'),
     # ('second', 'derivative'),
-    # ('north', 'america'),
-    # ('human', 'rights'),
-    # ('side', 'effects'),
+    ('north', 'america'),
+    ('human', 'rights'),
+    ('side', 'effects'),
     # ('public', 'health'),
     # ('federal', 'government'),
     # ('third', 'party'),
     # ('clinical', 'trials'),
-    # ('mental', 'health'),
+    ('mental', 'health'),
 ]
 
 
@@ -159,15 +159,18 @@ class FeatureDatasetConfig:
 
 
 if __name__ == "__main__":
-    ds_name = 'NeelNanda/pile-10k'
-    raw_ds = datasets.load_dataset(ds_name, split="train")
-
     model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
     tokenizer = model.tokenizer
     del model
 
+    # ds_name = 'NeelNanda/pile-10k'
+    # raw_ds = datasets.load_dataset(ds_name, split="train")
+
+    ds_name = 'openwebtext'
+    raw_ds = datasets.load_dataset(ds_name, split="train[:10%]")
+
     ctx_len = 24
-    n_seq = 1_000
+    n_seq = 8_000
 
     dataset_config = FeatureDatasetConfig(
         dataset_name=ds_name,
