@@ -179,7 +179,8 @@ def plot_hist(neuron_activations, feature_name, n_mlps=3, mlp_dir='mlps'):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mlp-dir", default='mlps', type=str, help="Dir to load MLPs and save plots")
+    parser.add_argument("--mlp-dir", default='mlps', type=str, help="Dir to load MLPs and save plots.")
+    parser.add_argument("--mlp-type", default='gelu', type=str, help="Type of MLP to use. 'gelu' or 'solu'.")
     args = parser.parse_args()
 
     feature_names = [ # layer 1
@@ -191,14 +192,11 @@ if __name__ == "__main__":
         'side-effects',
         ]
     
-    mlp_type = 'gelu'
-    mlp_dir = args.mlp_dir
-
     for feature_name in feature_names:
         neuron_activations, top_neuron_idxs = analyse_feature(feature_name,
-                                                              mlp_type=mlp_type,
-                                                              mlp_dir=mlp_dir,
+                                                              mlp_type=args.mlp_type,
+                                                              mlp_dir=args.mlp_dir,
                                                               dataset_name='openwebtext',
                                                               )
         neuron_activations, top_neuron_idxs = rank_by_classifier(neuron_activations, top_neuron_idxs)
-        plot_hist(neuron_activations, feature_name, mlp_dir=mlp_dir)
+        plot_hist(neuron_activations, feature_name, mlp_dir=args.mlp_dir)
