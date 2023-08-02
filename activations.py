@@ -1,4 +1,5 @@
 import os
+import argparse
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,6 +16,7 @@ from transformer_lens import HookedTransformer
 def analyse_feature(
         feature_name: str,
         mlp_type: str = 'gelu', # 'gelu' or 'solu'
+        mlp_dir: str = 'mlps',
         layer=1,
         n_sequences=8000,
         n_pre_sort=100,
@@ -40,9 +42,8 @@ def analyse_feature(
         'missing_second': 2,
         }
 
-    mlps_dir = 'mlps'
     mlp_names = [f'mlp_8192_layer_{layer}.pt', f'mlp_16384_layer_{layer}.pt', f'mlp_32768_layer_{layer}.pt']
-    mlp_state_dicts = [torch.load(os.path.join(mlps_dir, mlp_name), map_location='cpu') for mlp_name in mlp_names]
+    mlp_state_dicts = [torch.load(os.path.join(mlp_dir, mlp_name), map_location='cpu') for mlp_name in mlp_names]
     mlp_class = GeluMLP if mlp_type == 'gelu' else SoluMLP
 
     mlps = []
@@ -149,7 +150,7 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_ml
     return neuron_activations, top_neuron_idxs_ranked
 
 
-def plot_hist(neuron_activations, feature_name, n_mlps=3):
+def plot_hist(neuron_activations, feature_name, n_mlps=3, mlp_dir='mlps'):
 
     # Compute min and max across all activations
     overall_min = min([min([min(act) for act in neuron]) for mlp in neuron_activations for neuron in mlp])
@@ -171,11 +172,14 @@ def plot_hist(neuron_activations, feature_name, n_mlps=3):
 
     plt.tight_layout()
     plt.savefig(f'{feature_name}_activations.png')
+    plt.savefig(os.path.join(mlp_dir, f'{feature_name}_activations.png'))
     plt.show()
 
 
-
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mlp-dir", default='mlps', type=str, help="Dir to load MLPs and save plots")
+    args = parser.parse_args()
 
     feature_names = [ # layer 1
         'magnetic-field',
@@ -187,8 +191,9 @@ if __name__ == "__main__":
         ]
     
     mlp_type = 'gelu'
+    mlp_dir = args.mlp_dir
 
     for feature_name in feature_names:
-        neuron_activations, top_neuron_idxs = analyse_feature(feature_name, mlp_type=mlp_type)
+        neuron_activations, top_neuron_idxs = analyse_feature(feature_name, mlp_type=mlp_type, mlp_dir=mlp_dir)
         neuron_activations, top_neuron_idxs = rank_by_classifier(neuron_activations, top_neuron_idxs)
-        plot_hist(neuron_activations, feature_name)
+        plot_hist(neuron_activations, feature_name, mlp_dir=mlp_dir)
