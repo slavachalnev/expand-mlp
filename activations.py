@@ -89,8 +89,7 @@ def analyse_feature(
             model.forward(item['tokens'].unsqueeze(0), stop_at_layer=layer+1)
 
             for mlp_i, mlp in enumerate(mlps):
-                h = mlp.forward(mlp_inputs.to(device), return_pre_act=True).squeeze(0).cpu()
-                h = F.gelu(h)
+                h = mlp.forward(mlp_inputs.to(device), return_post_act=True).squeeze(0).cpu()
                 act_sums[mlp_i][:, label_idx] += h
 
     act_means = [act_sum / counts for act_sum in act_sums]
@@ -149,7 +148,7 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_ml
     return neuron_activations, top_neuron_idxs_ranked
 
 
-def plot_hist(neuron_activations, n_mlps=3):
+def plot_hist(neuron_activations, feature_name, n_mlps=3):
 
     # Compute min and max across all activations
     overall_min = min([min([min(act) for act in neuron]) for mlp in neuron_activations for neuron in mlp])
@@ -170,7 +169,7 @@ def plot_hist(neuron_activations, n_mlps=3):
             axs[i*5+j].legend()
 
     plt.tight_layout()
-    plt.savefig('activations.png')
+    plt.savefig(f'{feature_name}_activations.png')
     plt.show()
 
 
@@ -189,4 +188,4 @@ if __name__ == "__main__":
     for feature_name in feature_names:
         neuron_activations, top_neuron_idxs = analyse_feature(feature_name)
         neuron_activations, top_neuron_idxs = rank_by_classifier(neuron_activations, top_neuron_idxs)
-        plot_hist(neuron_activations)
+        plot_hist(neuron_activations, feature_name)
