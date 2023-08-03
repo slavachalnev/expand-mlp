@@ -158,10 +158,11 @@ def plot_hist(neuron_activations, feature_name, n_mlps=4, mlp_dir='mlps'):
     overall_max = max([max([max(act) for act in neuron]) for mlp in neuron_activations for neuron in mlp])
 
     # Compute bins
-    n_bins = 50
+    n_bins = 100
     bins = np.linspace(overall_min, overall_max, n_bins)
 
-    fig, axs = plt.subplots(n_mlps*5, 1, figsize=(10, 5 * n_mlps * 5))
+    n_neurons = len(neuron_activations[0])  # Number of neurons inferred from the data
+    fig, axs = plt.subplots(n_neurons, n_mlps, figsize=(5*n_mlps, 5*n_neurons))
     labels = ['bigram', 'missing_first', 'missing_second']
 
     mlp_names = ['8192', '16384', '32768', 'original']
@@ -169,9 +170,9 @@ def plot_hist(neuron_activations, feature_name, n_mlps=4, mlp_dir='mlps'):
     for i, neuron_label_activations in enumerate(neuron_activations):
         for j, label_activations in enumerate(neuron_label_activations):
             for k, activations in enumerate(label_activations):
-                axs[i*5+j].hist(activations, bins=bins, alpha=0.5, label=labels[k])
-            axs[i*5+j].set_title(f'Activations of Top Neuron {j+1} for mlp_{mlp_names[i]}')
-            axs[i*5+j].legend()
+                axs[j, i].hist(activations, bins=bins, alpha=0.5, label=labels[k])
+            axs[j, i].set_title(f'Activations of Top Neuron {j+1} for mlp_{mlp_names[i]}')
+            axs[j, i].legend()
 
     plt.tight_layout()
     plt.savefig(os.path.join(mlp_dir, f'{feature_name}_activations.png'))
