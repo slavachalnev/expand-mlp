@@ -81,7 +81,7 @@ def analyse_feature(
 
 
     act_sums = [] # for every mlp we have a tensor of shape (h_size, 3)
-    for h_size in mlp_dims + [model.cfg.d_model]:  # last one is for the original model.
+    for h_size in mlp_dims + [model.cfg.d_model * 4]:  # last one is for the original model.
         act_sums.append(torch.zeros((h_size, 3)))
     counts = torch.zeros((3,))
 
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mlp-dir", default='mlps', type=str, help="Dir to load MLPs and save plots.")
     parser.add_argument("--mlp-type", default='gelu', type=str, help="Type of MLP to use. gelu or solu.")
-    parser.add_argument('--mlp_dims', nargs='+', type=int, default=None, help='List of MLP dimensions')
+    parser.add_argument('--mlp-dims', nargs='+', type=int, default=None, help='List of MLP dimensions')
     args = parser.parse_args()
 
     feature_names = [ # layer 1
