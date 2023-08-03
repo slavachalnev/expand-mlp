@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_score, recall_score
 
 from ngram_ds import BigramFeatureDataset, FeatureDatasetConfig
 from mlp import GeluMLP, SoluMLP
@@ -121,9 +122,11 @@ def analyse_feature(
     return neuron_activations, top_neuron_idxs
 
 
-def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_mlps=4):
-    # Training a classifier for each neuron and recording the accuracy
-    classifier_accuracies = [[0 for _ in range(n_pre_sort)] for _ in range(len(top_neuron_idxs))]
+def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100):
+    n_mlps = len(neuron_activations)
+
+    # Training a classifier for each neuron and recording the accuracy, precision, and recall
+    classifier_metrics = [[{"accuracy": 0, "precision": 0, "recall": 0} for _ in range(n_pre_sort)] for _ in range(len(top_neuron_idxs))]
     for mlp_i in range(n_mlps):
         for neuron_i in range(len(top_neuron_idxs[mlp_i])):
             # Preparing the data
@@ -136,11 +139,28 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_ml
             # Training the classifier
             clf = LogisticRegression(random_state=42, penalty=None).fit(np.array(X).reshape(-1, 1), y)
 
-            # Recording the accuracy
-            classifier_accuracies[mlp_i][neuron_i] = clf.score(np.array(X).reshape(-1, 1), y)
+            y_pred = clf.predict(np.array(X).reshape(-1, 1))
 
-    # Re-ranking neurons by classifier accuracy
-    top_neuron_idxs_ranked = [sorted(range(len(accs)), key=lambda i: -accs[i])[:5] for accs in classifier_accuracies]  # get top 5 neurons
+            # Recording the accuracy, precision and recall
+            classifier_metrics[mlp_i][neuron_i]["accuracy"] = clf.score(np.array(X).reshape(-1, 1), y)
+            classifier_metrics[mlp_i][neuron_i]["precision"] = precision_score(y, y_pred)
+            classifier_metrics[mlp_i][neuron_i]["recall"] = recall_score(y, y_pred)
+
+    top_neuron_idxs_ranked = [
+        sorted(
+            range(len(metrics)), key=lambda i: -metrics[i]["accuracy"]
+        )[:5] 
+        for metrics in classifier_metrics
+    ]  # get top 5 neurons
+    
+    classifier_metrics_ranked = [
+        [
+            classifier_metrics[mlp_i][neuron_i] 
+            for neuron_i in top_neuron_idxs_ranked[mlp_i]
+        ] 
+        for mlp_i in range(n_mlps)
+    ]  # get metrics for top 5 neurons
+
     neuron_activations_ranked = []
     for mlp_i in range(n_mlps):
         neuron_activations_ranked.append([])
@@ -148,10 +168,11 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_ml
             neuron_activations_ranked[mlp_i].append(neuron_activations[mlp_i][neuron_i])
     neuron_activations = neuron_activations_ranked
 
-    return neuron_activations, top_neuron_idxs_ranked
+    return neuron_activations, top_neuron_idxs_ranked, classifier_metrics_ranked
 
 
-def plot_hist(neuron_activations, feature_name, n_mlps=4, mlp_dir='mlps'):
+def plot_hist(neuron_activations, feature_name, mlp_dir='mlps'):
+    n_mlps = len(neuron_activations)
 
     # Compute min and max across all activations
     overall_min = min([min([min(act) for act in neuron]) for mlp in neuron_activations for neuron in mlp])
@@ -196,10 +217,12 @@ if __name__ == "__main__":
         ]
     
     for feature_name in feature_names:
+        print(f'Analysing {feature_name}')
         neuron_activations, top_neuron_idxs = analyse_feature(feature_name,
                                                               mlp_type=args.mlp_type,
                                                               mlp_dir=args.mlp_dir,
                                                               dataset_name='openwebtext',
                                                               )
-        neuron_activations, top_neuron_idxs = rank_by_classifier(neuron_activations, top_neuron_idxs)
+        neuron_activations, top_neuron_idxs, classifier_metrics = rank_by_classifier(neuron_activations, top_neuron_idxs)
+        print(classifier_metrics)
         plot_hist(neuron_activations, feature_name, mlp_dir=args.mlp_dir)
