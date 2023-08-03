@@ -76,7 +76,8 @@ def analyse_feature(
 
     hooks = [
         (f'blocks.{layer}.ln2.hook_normalized', inputs_hook),
-        (f'blocks.{layer}.mlp.hook_pre', hidden_hook),
+        # (f'blocks.{layer}.mlp.hook_pre', hidden_hook),
+        (f'blocks.{layer}.mlp.hook_post', hidden_hook),
         ]
 
 
@@ -180,13 +181,7 @@ def plot_hist(neuron_activations, feature_name, mlp_dir='mlps', mlp_dims=None):
         mlp_dims = [8192, 16384, 32768]
     n_mlps = len(neuron_activations)
 
-    # Compute min and max across all activations
-    overall_min = min([min([min(act) for act in neuron]) for mlp in neuron_activations for neuron in mlp])
-    overall_max = max([max([max(act) for act in neuron]) for mlp in neuron_activations for neuron in mlp])
-
-    # Compute bins
     n_bins = 100
-    bins = np.linspace(overall_min, overall_max, n_bins)
 
     n_neurons = len(neuron_activations[0])
     fig, axs = plt.subplots(n_neurons, n_mlps, figsize=(5*n_mlps, 5*n_neurons))
@@ -195,6 +190,13 @@ def plot_hist(neuron_activations, feature_name, mlp_dir='mlps', mlp_dims=None):
     mlp_names = mlp_names = [str(dim) for dim in mlp_dims] + ['original']
 
     for i, neuron_label_activations in enumerate(neuron_activations):
+        # Compute min and max for each MLP
+        mlp_min = min([min([min(act) for act in neuron]) for neuron in neuron_label_activations])
+        mlp_max = max([max([max(act) for act in neuron]) for neuron in neuron_label_activations])
+
+        # Compute bins for each MLP
+        bins = np.linspace(mlp_min, mlp_max, n_bins)
+
         for j, label_activations in enumerate(neuron_label_activations):
             for k, activations in enumerate(label_activations):
                 axs[j, i].hist(activations, bins=bins, alpha=0.5, label=labels[k])
