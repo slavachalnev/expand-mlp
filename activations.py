@@ -77,7 +77,7 @@ def analyse_feature(
 
 
     act_sums = [] # for every mlp we have a tensor of shape (h_size, 3)
-    for h_size in [8192, 16384, 32768]:
+    for h_size in [8192, 16384, 32768, 8192]:  # last one is for the original model.
         act_sums.append(torch.zeros((h_size, 3)))
     counts = torch.zeros((3,))
 
@@ -91,6 +91,7 @@ def analyse_feature(
             for mlp_i, mlp in enumerate(mlps):
                 h = mlp.forward(mlp_state['input'].to(device), return_post_act=True).squeeze(0).cpu()
                 act_sums[mlp_i][:, label_idx] += h
+            act_sums[-1][:, label_idx] += mlp_state['hidden'].squeeze(0).cpu() # for the original model
 
     act_means = [act_sum / counts for act_sum in act_sums]
 
@@ -114,11 +115,13 @@ def analyse_feature(
                 h = mlp.forward(mlp_state['input'].to(device), return_pre_act=True).squeeze(0).cpu()
                 for idx, neuron_idx in enumerate(top_neuron_idxs[mlp_i]):
                     neuron_activations[mlp_i][idx][label_idx].append(h[neuron_idx].item())  # save the activation of top neurons
+            for idx, neuron_idx in enumerate(top_neuron_idxs[-1]):  # for the original model
+                neuron_activations[-1][idx][label_idx].append(mlp_state['hidden'].squeeze(0).cpu()[neuron_idx].item())
     
     return neuron_activations, top_neuron_idxs
 
 
-def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_mlps=3):
+def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_mlps=4):
     # Training a classifier for each neuron and recording the accuracy
     classifier_accuracies = [[0 for _ in range(n_pre_sort)] for _ in range(len(top_neuron_idxs))]
     for mlp_i in range(n_mlps):
@@ -148,7 +151,7 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100, n_ml
     return neuron_activations, top_neuron_idxs_ranked
 
 
-def plot_hist(neuron_activations, feature_name, n_mlps=3, mlp_dir='mlps'):
+def plot_hist(neuron_activations, feature_name, n_mlps=4, mlp_dir='mlps'):
 
     # Compute min and max across all activations
     overall_min = min([min([min(act) for act in neuron]) for mlp in neuron_activations for neuron in mlp])
@@ -161,11 +164,13 @@ def plot_hist(neuron_activations, feature_name, n_mlps=3, mlp_dir='mlps'):
     fig, axs = plt.subplots(n_mlps*5, 1, figsize=(10, 5 * n_mlps * 5))
     labels = ['bigram', 'missing_first', 'missing_second']
 
+    mlp_names = ['8192', '16384', '32768', 'original']
+
     for i, neuron_label_activations in enumerate(neuron_activations):
         for j, label_activations in enumerate(neuron_label_activations):
             for k, activations in enumerate(label_activations):
                 axs[i*5+j].hist(activations, bins=bins, alpha=0.5, label=labels[k])
-            axs[i*5+j].set_title(f'Activations of Top Neuron {j+1} for MLP {i+1}')
+            axs[i*5+j].set_title(f'Activations of Top Neuron {j+1} for mlp_{mlp_names[i]}')
             axs[i*5+j].legend()
 
     plt.tight_layout()
