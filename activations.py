@@ -161,7 +161,7 @@ def plot_hist(neuron_activations, feature_name, n_mlps=4, mlp_dir='mlps'):
     n_bins = 100
     bins = np.linspace(overall_min, overall_max, n_bins)
 
-    n_neurons = len(neuron_activations[0])  # Number of neurons inferred from the data
+    n_neurons = len(neuron_activations[0])
     fig, axs = plt.subplots(n_neurons, n_mlps, figsize=(5*n_mlps, 5*n_neurons))
     labels = ['bigram', 'missing_first', 'missing_second']
 
@@ -171,6 +171,7 @@ def plot_hist(neuron_activations, feature_name, n_mlps=4, mlp_dir='mlps'):
         for j, label_activations in enumerate(neuron_label_activations):
             for k, activations in enumerate(label_activations):
                 axs[j, i].hist(activations, bins=bins, alpha=0.5, label=labels[k])
+                axs[j, i].set_yscale('log')
             axs[j, i].set_title(f'Activations of Top Neuron {j+1} for mlp_{mlp_names[i]}')
             axs[j, i].legend()
 

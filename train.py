@@ -92,8 +92,7 @@ def train_models(
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # hs_multiples = [1, 2, 4, 8]
-    hs_multiples = [1, 2, 4]
+    hs_multiples = [1, 2, 4, 8]
     layers = [1, 2]
 
     # Create a time-stamped directory for this run
@@ -105,12 +104,12 @@ if __name__ == "__main__":
         params = {
             'layer_idx': layer_idx,
             'hs_multiples': hs_multiples,
-            'mlp_type': 'gelu',
-            'num_steps': 40000,
+            'mlp_type': 'solu',
+            'num_steps': 60000,
             'device': str(device),
-            'pre_noise': 0.01,
+            'pre_noise': 0.0,
             'post_noise': 0.0,
-            'hidden_noise': 0.01,
+            'hidden_noise': 0.0,
             'save_dir': save_dir,
         }
 
