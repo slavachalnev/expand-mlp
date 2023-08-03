@@ -92,8 +92,10 @@ def train_models(
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    hs_multiples = [1, 2, 4, 8]
+    # hs_multiples = [1, 2, 4, 8]
+    hs_multiples = [8]
     layers = [1, 2]
+    layers = [1]
 
     # Create a time-stamped directory for this run
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

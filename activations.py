@@ -188,11 +188,11 @@ if __name__ == "__main__":
 
     feature_names = [ # layer 1
         'magnetic-field',
-        # 'human-rights',
-        # 'north-america',
-        # 'gene-expression',
-        # 'mental-health',
-        # 'side-effects',
+        'human-rights',
+        'north-america',
+        'gene-expression',
+        'mental-health',
+        'side-effects',
         ]
     
     for feature_name in feature_names:
