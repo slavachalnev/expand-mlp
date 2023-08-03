@@ -22,7 +22,10 @@ def analyse_feature(
         n_sequences=8000,
         n_pre_sort=100,
         dataset_name='NeelNanda/pile-10k',
+        mlp_dims=None,
     ):
+    if mlp_dims is None:
+        mlp_dims = [8192, 16384, 32768]
 
     dataset_config = FeatureDatasetConfig(
         dataset_name=dataset_name,
@@ -44,7 +47,7 @@ def analyse_feature(
         'missing_second': 2,
         }
 
-    mlp_names = [f'mlp_8192_layer_{layer}.pt', f'mlp_16384_layer_{layer}.pt', f'mlp_32768_layer_{layer}.pt']
+    mlp_names = [f'mlp_{dim}_layer_{layer}.pt' for dim in mlp_dims]
     mlp_state_dicts = [torch.load(os.path.join(mlp_dir, mlp_name), map_location='cpu') for mlp_name in mlp_names]
     mlp_class = GeluMLP if mlp_type == 'gelu' else SoluMLP
 
@@ -78,7 +81,7 @@ def analyse_feature(
 
 
     act_sums = [] # for every mlp we have a tensor of shape (h_size, 3)
-    for h_size in [8192, 16384, 32768, 8192]:  # last one is for the original model.
+    for h_size in mlp_dims + [model.cfg.d_model]:  # last one is for the original model.
         act_sums.append(torch.zeros((h_size, 3)))
     counts = torch.zeros((3,))
 
@@ -171,7 +174,9 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100):
     return neuron_activations, top_neuron_idxs_ranked, classifier_metrics_ranked
 
 
-def plot_hist(neuron_activations, feature_name, mlp_dir='mlps'):
+def plot_hist(neuron_activations, feature_name, mlp_dir='mlps', mlp_dims=None):
+    if mlp_dims is None:
+        mlp_dims = [8192, 16384, 32768]
     n_mlps = len(neuron_activations)
 
     # Compute min and max across all activations
@@ -186,7 +191,7 @@ def plot_hist(neuron_activations, feature_name, mlp_dir='mlps'):
     fig, axs = plt.subplots(n_neurons, n_mlps, figsize=(5*n_mlps, 5*n_neurons))
     labels = ['bigram', 'missing_first', 'missing_second']
 
-    mlp_names = ['8192', '16384', '32768', 'original']
+    mlp_names = mlp_names = [str(dim) for dim in mlp_dims] + ['original']
 
     for i, neuron_label_activations in enumerate(neuron_activations):
         for j, label_activations in enumerate(neuron_label_activations):
@@ -205,6 +210,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mlp-dir", default='mlps', type=str, help="Dir to load MLPs and save plots.")
     parser.add_argument("--mlp-type", default='gelu', type=str, help="Type of MLP to use. gelu or solu.")
+    parser.add_argument('--mlp_dims', nargs='+', type=int, default=None, help='List of MLP dimensions')
     args = parser.parse_args()
 
     feature_names = [ # layer 1
@@ -222,7 +228,8 @@ if __name__ == "__main__":
                                                               mlp_type=args.mlp_type,
                                                               mlp_dir=args.mlp_dir,
                                                               dataset_name='openwebtext',
+                                                              mlp_dims=args.mlp_dims,
                                                               )
         neuron_activations, top_neuron_idxs, classifier_metrics = rank_by_classifier(neuron_activations, top_neuron_idxs)
         print(classifier_metrics)
-        plot_hist(neuron_activations, feature_name, mlp_dir=args.mlp_dir)
+        plot_hist(neuron_activations, feature_name, mlp_dir=args.mlp_dir, mlp_dims=args.mlp_dims)
