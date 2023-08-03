@@ -116,7 +116,8 @@ def analyse_feature(
             model.forward(item['tokens'].unsqueeze(0), stop_at_layer=layer+1)
 
             for mlp_i, mlp in enumerate(mlps):
-                h = mlp.forward(mlp_state['input'].to(device), return_pre_act=True).squeeze(0).cpu()
+                # h = mlp.forward(mlp_state['input'].to(device), return_pre_act=True).squeeze(0).cpu()
+                h = mlp.forward(mlp_state['input'].to(device), return_post_act=True).squeeze(0).cpu()
                 for idx, neuron_idx in enumerate(top_neuron_idxs[mlp_i]):
                     neuron_activations[mlp_i][idx][label_idx].append(h[neuron_idx].item())  # save the activation of top neurons
             for idx, neuron_idx in enumerate(top_neuron_idxs[-1]):  # for the original model
