@@ -180,25 +180,20 @@ def plot_hist(neuron_activations, feature_name, mlp_dir='mlps', mlp_dims=None):
     if mlp_dims is None:
         mlp_dims = [8192, 16384, 32768]
     n_mlps = len(neuron_activations)
+    n_neurons = len(neuron_activations[0])
 
     n_bins = 100
 
-    n_neurons = len(neuron_activations[0])
     fig, axs = plt.subplots(n_neurons, n_mlps, figsize=(5*n_mlps, 5*n_neurons))
     labels = ['bigram', 'missing_first', 'missing_second']
-
-    mlp_names = mlp_names = [str(dim) for dim in mlp_dims] + ['original']
+    mlp_names = [str(dim) for dim in mlp_dims] + ['original']
 
     for i, neuron_label_activations in enumerate(neuron_activations):
-        # Compute min and max for each MLP
-        mlp_min = min([min([min(act) for act in neuron]) for neuron in neuron_label_activations])
-        mlp_max = max([max([max(act) for act in neuron]) for neuron in neuron_label_activations])
-
-        # Compute bins for each MLP
-        bins = np.linspace(mlp_min, mlp_max, n_bins)
-
         for j, label_activations in enumerate(neuron_label_activations):
             for k, activations in enumerate(label_activations):
+
+                bins = np.linspace(min(activations), max(activations), n_bins)
+
                 axs[j, i].hist(activations, bins=bins, alpha=0.5, label=labels[k])
                 axs[j, i].set_yscale('log')
             axs[j, i].set_title(f'Activations of Top Neuron {j+1} for mlp_{mlp_names[i]}')
