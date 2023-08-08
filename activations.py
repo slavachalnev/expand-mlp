@@ -176,7 +176,7 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=100):
     return neuron_activations, top_neuron_idxs_ranked, classifier_metrics_ranked
 
 
-def plot_hist(neuron_activations, feature_name, mlp_dir='mlps', mlp_dims=None):
+def plot_hist(neuron_activations, top_neuron_idxs, feature_name, mlp_dir='mlps', mlp_dims=None):
     if mlp_dims is None:
         mlp_dims = [8192, 16384, 32768]
     n_mlps = len(neuron_activations)
@@ -196,7 +196,7 @@ def plot_hist(neuron_activations, feature_name, mlp_dir='mlps', mlp_dims=None):
 
                 axs[j, i].hist(activations, bins=bins, alpha=0.5, label=labels[k])
                 axs[j, i].set_yscale('log')
-            axs[j, i].set_title(f'Activations of Top Neuron {j+1} for mlp_{mlp_names[i]}')
+            axs[j, i].set_title(f'Activations of Top Neuron {j+1} (Index {top_neuron_idxs[i][j]}) for mlp_{mlp_names[i]}')
             axs[j, i].legend()
 
     plt.tight_layout()
@@ -230,4 +230,4 @@ if __name__ == "__main__":
                                                               )
         neuron_activations, top_neuron_idxs, classifier_metrics = rank_by_classifier(neuron_activations, top_neuron_idxs)
         print(classifier_metrics)
-        plot_hist(neuron_activations, feature_name, mlp_dir=args.mlp_dir, mlp_dims=args.mlp_dims)
+        plot_hist(neuron_activations, top_neuron_idxs, feature_name, mlp_dir=args.mlp_dir, mlp_dims=args.mlp_dims)
