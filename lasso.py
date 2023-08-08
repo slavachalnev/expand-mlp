@@ -25,12 +25,15 @@ def echo(matrix, neuron_idx):
 
 
 def main():
-    mlp_dir = 'mlps'
-    mlp_name = 'mlp_1024_layer_11.pt'
+    mlp_path = "/Users/slava/Desktop/od/8xsolu/2023-08-03_12-44-13/mlp_65536_layer_1.pt"
 
-    mlp_state_dict = torch.load(os.path.join(mlp_dir, mlp_name), map_location='cpu')
+    mlp_state_dict = torch.load(mlp_path, map_location='cpu')
 
-    # out projection matrix
-    matrix = mlp_state_dict['fc2.weight'].T
+    matrix = mlp_state_dict['fc2.weight']
+
+    # matrix shape is (d_model, 4 * d_model)
     print(matrix.shape)
 
+
+if __name__ == "__main__":
+    main()
