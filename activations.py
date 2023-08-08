@@ -104,7 +104,9 @@ def analyse_feature(
     top_neuron_idxs = []
     for act_mean in act_means:
         diffs = act_mean[:, 0] - torch.max(act_mean[:, 1], act_mean[:, 2])
-        top_neuron_idxs.append(diffs.argsort(descending=True)[:n_pre_sort])  # get top neurons
+        #top_neuron_idxs.append(diffs.argsort(descending=True)[:n_pre_sort])  # get top neurons
+        sorted_idx = diffs.argsort(descending=True)
+        top_neuron_idxs.append(sorted_idx[:n_pre_sort].tolist())
         print(diffs[top_neuron_idxs[-1]])
 
     # Prepare empty lists to store neuron activations
@@ -220,6 +222,7 @@ if __name__ == "__main__":
         'mental-health',
         'side-effects',
         ]
+    n_pre_sort = 1000
     
     for feature_name in feature_names:
         print(f'Analysing {feature_name}')
@@ -228,7 +231,8 @@ if __name__ == "__main__":
                                                               mlp_dir=args.mlp_dir,
                                                               dataset_name='openwebtext',
                                                               mlp_dims=args.mlp_dims,
+                                                              n_pre_sort=n_pre_sort,
                                                               )
-        neuron_activations, top_neuron_idxs, classifier_metrics = rank_by_classifier(neuron_activations, top_neuron_idxs)
+        neuron_activations, top_neuron_idxs, classifier_metrics = rank_by_classifier(neuron_activations, top_neuron_idxs, n_pre_sort=n_pre_sort)
         print(classifier_metrics)
         plot_hist(neuron_activations, top_neuron_idxs, feature_name, mlp_dir=args.mlp_dir, mlp_dims=args.mlp_dims)
