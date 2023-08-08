@@ -190,13 +190,14 @@ def plot_hist(neuron_activations, top_neuron_idxs, feature_name, mlp_dir='mlps',
 
     for i, neuron_label_activations in enumerate(neuron_activations):
         for j, label_activations in enumerate(neuron_label_activations):
+            neuron_idx = top_neuron_idxs[i][j] # Get the actual neuron index
             for k, activations in enumerate(label_activations):
 
                 bins = np.linspace(min(activations), max(activations), n_bins)
 
                 axs[j, i].hist(activations, bins=bins, alpha=0.5, label=labels[k])
                 axs[j, i].set_yscale('log')
-            axs[j, i].set_title(f'Activations of Top Neuron {j+1} (Index {top_neuron_idxs[i][j]}) for mlp_{mlp_names[i]}')
+            axs[j, i].set_title(f'Activations of Neuron {neuron_idx} for mlp_{mlp_names[i]}')
             axs[j, i].legend()
 
     plt.tight_layout()
