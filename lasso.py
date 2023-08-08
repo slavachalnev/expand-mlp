@@ -13,8 +13,11 @@ def get_out_proj(matrix, neuron_idx):
 
 
 def back_to_activations(matrix, out_projection):
-    # do lasso.
-    raise NotImplementedError
+    # Perform Lasso regression using the given out_projection.
+    lasso = Lasso(alpha=0.1, max_iter=1000)
+    lasso.fit(matrix, out_projection)
+    activations = torch.tensor(lasso.coef_)
+    return activations
 
 
 def echo(matrix, neuron_idx):
@@ -33,6 +36,10 @@ def main():
 
     # matrix shape is (d_model, 4 * d_model)
     print(matrix.shape)
+
+    neuron_idx = 5  # Example index
+    top_activations = echo(matrix, neuron_idx)
+    print(top_activations)  # Print the top 10 activations
 
 
 if __name__ == "__main__":
