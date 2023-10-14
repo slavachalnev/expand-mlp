@@ -9,14 +9,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_score, recall_score
 
 from ngram_ds import BigramFeatureDataset, FeatureDatasetConfig
-from mlp import GeluMLP, SoluMLP
+from mlp import GeluMLP, SoluMLP, ReluMLP
 
 from transformer_lens import HookedTransformer
 
 
 def analyse_feature(
         feature_name: str,
-        mlp_type: str = 'gelu', # 'gelu' or 'solu'
+        mlp_type: str = 'relu', # 'gelu', 'relu', or 'solu'
         mlp_dir: str = 'mlps',
         layer=1,
         n_sequences=8000,
@@ -38,7 +38,8 @@ def analyse_feature(
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
+    # model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
+    model = HookedTransformer.from_pretrained_no_processing("EleutherAI/pythia-70m-deduped")
     # ngram_ds[i] is {'tokens': tensor, 'label': "bigram" or "missing_first", or "missing_second", 'feature_name': "magnetic-field"}
 
     label_to_idx = {
@@ -49,7 +50,7 @@ def analyse_feature(
 
     mlp_names = [f'mlp_{dim}_layer_{layer}.pt' for dim in mlp_dims]
     mlp_state_dicts = [torch.load(os.path.join(mlp_dir, mlp_name), map_location='cpu') for mlp_name in mlp_names]
-    mlp_class = GeluMLP if mlp_type == 'gelu' else SoluMLP
+    mlp_class = GeluMLP if mlp_type == 'gelu' else (SoluMLP if mlp_type == 'solu' else ReluMLP) # hack
 
     mlps = []
     for mlp_state_dict in mlp_state_dicts:
@@ -134,10 +135,16 @@ def analyse_feature(
             for idx, neuron_idx in enumerate(top_neuron_idxs[-1]):  # for the original model
                 neuron_activations[-1][idx][label_idx].append(mlp_state['hidden'].squeeze(0).cpu()[neuron_idx].item())
     
-    return neuron_activations, top_neuron_idxs
+    # compute norm of out projection weights for each neuron
+    norms = []
+    for mlp_i, mlp in enumerate(mlps):
+        norms.append(torch.norm(mlp.fc2.weight, dim=0).detach().cpu().numpy())
+    norms.append(torch.norm(model.blocks[layer].mlp.W_out.T, dim=0).detach().cpu().numpy()) # for the original model
+    
+    return neuron_activations, top_neuron_idxs, norms
 
 
-def rank_by_classifier(neuron_activations, top_neuron_idxs):
+def rank_by_classifier(neuron_activations, top_neuron_idxs, norms):
     n_mlps = len(neuron_activations)
 
     # Training a classifier for each neuron and recording the accuracy, precision, and recall
@@ -162,10 +169,19 @@ def rank_by_classifier(neuron_activations, top_neuron_idxs):
             classifier_metrics[mlp_i][neuron_i]["precision"] = precision_score(y, y_pred)
             classifier_metrics[mlp_i][neuron_i]["recall"] = recall_score(y, y_pred)
 
+            # also compute the mean activation
+            classifier_metrics[mlp_i][neuron_i]["act_mean"] = np.mean(np.abs(neuron_activations[mlp_i][neuron_i][0]))
+
+    # compute scores
+    for mlp_i in range(n_mlps):
+        for neuron_i in range(len(top_neuron_idxs[mlp_i])):
+            classifier_metrics[mlp_i][neuron_i]["score"] = \
+                classifier_metrics[mlp_i][neuron_i]["act_mean"] * \
+                norms[mlp_i][neuron_i] * \
+                classifier_metrics[mlp_i][neuron_i]["accuracy"]
+                
     top_neuron_idxs_ranked = [
-        sorted(
-            range(len(metrics)), key=lambda i: -metrics[i]["accuracy"]
-        )[:5] 
+        sorted(range(len(metrics)), key=lambda i: -metrics[i]["score"])[:5] 
         for metrics in classifier_metrics
     ]  # get top 5 neurons
     
@@ -220,7 +236,7 @@ def plot_hist(neuron_activations, top_neuron_idxs, feature_name, mlp_dir='mlps',
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mlp-dir", type=str, required=True, help="Dir to load MLPs and save plots.")
-    parser.add_argument("--mlp-type", default='gelu', type=str, help="Type of MLP to use. gelu or solu.")
+    parser.add_argument("--mlp-type", default='relu', type=str, help="Type of MLP to use. relu, gelu or solu.")
     parser.add_argument('--mlp-dims', nargs='+', type=int, default=None, help='List of MLP dimensions')
     args = parser.parse_args()
 
@@ -235,12 +251,12 @@ if __name__ == "__main__":
     
     for feature_name in feature_names:
         print(f'Analysing {feature_name}')
-        neuron_activations, top_neuron_idxs = analyse_feature(feature_name,
+        neuron_activations, top_neuron_idxs, norms = analyse_feature(feature_name,
                                                               mlp_type=args.mlp_type,
                                                               mlp_dir=args.mlp_dir,
                                                               dataset_name='openwebtext',
                                                               mlp_dims=args.mlp_dims,
                                                               )
-        neuron_activations, top_neuron_idxs, classifier_metrics = rank_by_classifier(neuron_activations, top_neuron_idxs)
+        neuron_activations, top_neuron_idxs, classifier_metrics = rank_by_classifier(neuron_activations, top_neuron_idxs, norms)
         print(classifier_metrics)
         plot_hist(neuron_activations, top_neuron_idxs, feature_name, mlp_dir=args.mlp_dir, mlp_dims=args.mlp_dims)
