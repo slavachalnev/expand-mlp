@@ -14,7 +14,7 @@ from transformer_lens.utils import tokenize_and_concatenate
 from transformer_lens import HookedTransformer
 
 from dataset import ModelDataset
-from mlp import GeluMLP, SoluMLP
+from mlp import GeluMLP, SoluMLP, ReluMLP
 
 
 def save_parameters(save_dir: str, params: dict):
@@ -36,21 +36,36 @@ def train_models(
         pre_noise=0.0,
         post_noise=0.0,
         hidden_noise=0.0,
+        skip_connection: bool = False,
         ):
 
     # model = HookedTransformer.from_pretrained_no_processing("pythia-70m-v0")
-    model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
+    # model = HookedTransformer.from_pretrained_no_processing("pythia-1b-v0")
+    model = HookedTransformer.from_pretrained_no_processing("EleutherAI/pythia-70m-deduped")
 
     # text_data = load_dataset("NeelNanda/pile-10k", split="train")
     text_data = load_dataset("openwebtext", split="train[:10%]")
-    text_dataset = tokenize_and_concatenate(text_data, model.tokenizer)
+    text_dataset = tokenize_and_concatenate(text_data, model.tokenizer, max_length=48)
 
-    model_dataset = ModelDataset(model, layer_idx=layer_idx, dataset=text_dataset, batch_size=8, device=device)
+    model_dataset = ModelDataset(
+        model,
+        layer_idx=layer_idx,
+        dataset=text_dataset,
+        batch_size=1024, 
+        device=device,
+        skip_connection=skip_connection,
+        )
 
     if mlp_type == 'gelu':
         mlp_class = GeluMLP
+        raise NotImplementedError
     elif mlp_type == 'solu':
         mlp_class = SoluMLP
+        raise NotImplementedError
+
+    elif mlp_type == 'relu':
+        mlp_class = ReluMLP
+
     else:
         raise ValueError(f"mlp_type must be 'gelu' or 'solu', got {mlp_type}")
     
@@ -71,8 +86,10 @@ def train_models(
 
         for mlp, optimizer, scheduler in zip(mlps, optimizers, schedulers):
             optimizer.zero_grad()
-            y = mlp(pre, hidden_noise=hidden_noise)
+            y, h = mlp(pre, hidden_noise=hidden_noise)
             loss = torch.nn.functional.mse_loss(y, post)
+            # l1 regularization
+            loss += 1e-3 * torch.norm(h, p=1) / h.shape[0]
             loss.backward()
 
             optimizer.step()
@@ -94,7 +111,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # hs_multiples = [1, 2, 4, 8]
     hs_multiples = [8]
-    layers = [1, 2]
+    # layers = [1, 2]
     layers = [1]
 
     # Create a time-stamped directory for this run
@@ -106,13 +123,14 @@ if __name__ == "__main__":
         params = {
             'layer_idx': layer_idx,
             'hs_multiples': hs_multiples,
-            'mlp_type': 'solu',
-            'num_steps': 60000,
+            'mlp_type': 'relu',
+            'num_steps': 100000,
             'device': str(device),
             'pre_noise': 0.0,
             'post_noise': 0.0,
             'hidden_noise': 0.0,
             'save_dir': save_dir,
+            'skip_connection': True,
         }
 
         save_parameters(save_dir, params)
