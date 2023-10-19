@@ -67,7 +67,7 @@ def train_models(
         mlp_class = ReluMLP
 
     else:
-        raise ValueError(f"mlp_type must be 'gelu' or 'solu', got {mlp_type}")
+        raise ValueError(f"mlp_type must be 'gelu', 'solu' or 'relu' got {mlp_type}")
     
     mlps = [mlp_class(input_size=model.cfg.d_model,
                     hidden_size=hs*4*model.cfg.d_model,
@@ -111,8 +111,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # hs_multiples = [1, 2, 4, 8]
     hs_multiples = [8]
-    # layers = [1, 2]
-    layers = [1]
+    layers = [1, 2, 3, 4, 5, 6, 7]
 
     # Create a time-stamped directory for this run
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -130,7 +129,7 @@ if __name__ == "__main__":
             'post_noise': 0.0,
             'hidden_noise': 0.0,
             'save_dir': save_dir,
-            'skip_connection': True,
+            'skip_connection': False,
         }
 
         save_parameters(save_dir, params)

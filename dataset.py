@@ -8,7 +8,21 @@ from transformer_lens.utils import tokenize_and_concatenate
 class ModelDataset:
     """Dataset of pre and post MLP activations"""
 
-    def __init__(self, model, layer_idx, dataset, batch_size, device):
+    def __init__(self,
+                 model,
+                 layer_idx,
+                 dataset,
+                 batch_size,
+                 device,
+                 skip_connection=False,
+                 parallel=True,  # parallel attn (e.g. pythia)
+                 ):
+        
+        if not parallel:
+            raise NotImplementedError("Only parallel attn is supported")
+        if skip_connection:
+            raise NotImplementedError("Skip connection not supported")
+
         self.model = model # HookedTransformer
         self.d_model = model.cfg.d_model
         self.layer_idx = layer_idx
