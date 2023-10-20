@@ -55,6 +55,11 @@ class ReluMLP(nn.Module):
 
         h = self.fc2(x)
         return h, x
+    
+    def encode(self, x):
+        x = self.fc1(x)
+        x = self.activation(x)
+        return x
 
 
 def solu(x, temperature=1.0):
