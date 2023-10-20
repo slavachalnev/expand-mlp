@@ -243,6 +243,40 @@ def get_df(
 
     # save the autoencoder being investigated
     os.makedirs(save_loc, exist_ok=True)
-    torch.save(feature_dict, os.path.join(save_loc, "autoencoder.pt"))
+    torch.save(feature_dict, os.path.join(save_loc, "expander_mlp.pt"))
 
     return base_df
+
+
+if __name__ == "__main__":
+    layer = 1
+    d_model = 512
+    expansion_factor = 8  # 8 times as many features as neurons in original layer.
+
+    mlp = ReluMLP(d_model, d_model*4*expansion_factor, d_model)
+    mlp_dir = "mlps/2023-10-15_10-31-52"
+    mlp.load_state_dict(torch.load(os.path.join(mlp_dir, f"mlp_16384_layer_{layer}.pt")))
+
+
+    model_name = "EleutherAI/pythia-70m-deduped"
+    layer_loc = "residual"
+    n_feats = 100
+    save_loc = os.path.join(mlp_dir, f"layer_{layer}_activations")
+    device = "cpu"
+    force_refresh = False
+
+    # Get DataFrame
+    base_df = get_df(
+        mlp,
+        model_name,
+        layer,
+        layer_loc,
+        n_feats,
+        save_loc,
+        device,
+        force_refresh
+    )
+
+    # Display the first few rows
+    print(base_df.head())
+
