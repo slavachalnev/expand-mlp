@@ -73,7 +73,7 @@ def train_models(
                     hidden_size=hs*4*model.cfg.d_model,
                     output_size=model.cfg.d_model).to(device)
             for hs in hs_multiples]
-    optimizers = [torch.optim.AdamW(mlp.parameters(), lr=1e-4) for mlp in mlps]
+    optimizers = [torch.optim.Adam(mlp.parameters(), lr=1e-4) for mlp in mlps]
     schedulers = [torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps) for optimizer in optimizers]
 
     writer = SummaryWriter()
@@ -89,7 +89,7 @@ def train_models(
             y, h = mlp(pre, hidden_noise=hidden_noise)
             loss = torch.nn.functional.mse_loss(y, post)
             # l1 regularization
-            loss += 1e-3 * torch.norm(h, p=1) / h.shape[0]
+            loss += 5e-3 * torch.norm(h, p=1) / h.shape[0]
             loss.backward()
 
             optimizer.step()
@@ -110,7 +110,7 @@ def train_models(
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # hs_multiples = [1, 2, 4, 8]
-    hs_multiples = [8]
+    hs_multiples = [4]
     layers = [1, 2, 3, 4, 5]
 
     # Create a time-stamped directory for this run
