@@ -39,6 +39,7 @@ from neuron_explainer.explanations.simulator import ExplanationNeuronSimulator
 from neuron_explainer.fast_dataclasses import loads
 
 from mlp import ReluMLP, MLP
+from config import InterpArgs
 
 
 EXPLAINER_MODEL_NAME = "gpt-4"  # "gpt-3.5-turbo"
@@ -94,7 +95,7 @@ def make_feature_activation_dataset(
     """
     model.to(device)
     model.eval()
-    learned_dict.to_device(device)
+    learned_dict.to(device)
 
     if max_features:
         feat_dim = min(max_features, learned_dict.hidden_size)
@@ -209,7 +210,7 @@ def get_df(
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     # Load feature dict
-    feature_dict.to_device(device)
+    feature_dict.to(device)
 
     df_loc = os.path.join(save_loc, f"activation_df.hdf")
 
@@ -248,6 +249,144 @@ def get_df(
     return base_df
 
 
+async def interpret(base_df: pd.DataFrame, save_folder: str, n_feats_to_explain: int) -> None:
+    for feat_n in range(0, n_feats_to_explain):
+        if os.path.exists(os.path.join(save_folder, f"feature_{feat_n}")):
+            print(f"Feature {feat_n} already exists, skipping")
+            continue
+
+        activation_col_names = [f"feature_{feat_n}_activation_{i}" for i in range(OPENAI_FRAGMENT_LEN)]
+        read_fields = [
+            "fragment_token_strs",
+            f"feature_{feat_n}_max",
+            *activation_col_names,
+        ]
+        # check that the dataset has the required columns
+        if not all([field in base_df.columns for field in read_fields]):
+            print(f"Dataset does not have all required columns for feature {feat_n}, skipping")
+            continue
+        df = base_df[read_fields].copy()
+        sorted_df = df.sort_values(by=f"feature_{feat_n}_max", ascending=False)
+        sorted_df = sorted_df.head(TOTAL_EXAMPLES)
+        top_activation_records = []
+        for i, row in sorted_df.iterrows():
+            top_activation_records.append(
+                ActivationRecord(
+                    row["fragment_token_strs"],
+                    [row[f"feature_{feat_n}_activation_{j}"] for j in range(OPENAI_FRAGMENT_LEN)],
+                )
+            )
+
+        random_activation_records: List[ActivationRecord] = []
+        # Adding random fragments
+        # random_df = df.sample(n=TOTAL_EXAMPLES)
+        # for i, row in random_df.iterrows():
+        #     random_activation_records.append(ActivationRecord(row["fragment_token_strs"], [row[f"feature_{feat_n}_activation_{j}"] for j in range(OPENAI_FRAGMENT_LEN)]))
+
+        # making sure that the have some variation in each of the features, though need to be careful that this doesn't bias the results
+        random_ordering = torch.randperm(len(df)).tolist()
+        skip_feature = False
+        while len(random_activation_records) < TOTAL_EXAMPLES:
+            try:
+                i = random_ordering.pop()
+            except IndexError:
+                skip_feature = True
+                break
+            # if there are no activations for this fragment, skip it
+            if df.iloc[i][f"feature_{feat_n}_max"] == 0:
+                continue
+            random_activation_records.append(
+                ActivationRecord(
+                    df.iloc[i]["fragment_token_strs"],
+                    [df.iloc[i][f"feature_{feat_n}_activation_{j}"] for j in range(OPENAI_FRAGMENT_LEN)],
+                )
+            )
+        if skip_feature:
+            # Add placeholder folder so that we don't try to recompute this feature
+            os.makedirs(os.path.join(save_folder, f"feature_{feat_n}"), exist_ok=True)
+            print(f"Skipping feature {feat_n} due to lack of activating examples")
+            continue
+
+        neuron_id = NeuronId(layer_index=2, neuron_index=feat_n)
+
+        neuron_record = NeuronRecord(
+            neuron_id=neuron_id,
+            random_sample=random_activation_records,
+            most_positive_activation_records=top_activation_records,
+        )
+        slice_params = ActivationRecordSliceParams(n_examples_per_split=OPENAI_EXAMPLES_PER_SPLIT)
+        train_activation_records = neuron_record.train_activation_records(slice_params)
+        valid_activation_records = neuron_record.valid_activation_records(slice_params)
+
+        explainer = TokenActivationPairExplainer(
+            model_name=EXPLAINER_MODEL_NAME,
+            prompt_format=PromptFormat.HARMONY_V4,
+            max_concurrent=MAX_CONCURRENT,
+        )
+        explanations = await explainer.generate_explanations(
+            all_activation_records=train_activation_records,
+            max_activation=calculate_max_activation(train_activation_records),
+            num_samples=1,
+        )
+        assert len(explanations) == 1
+        explanation = explanations[0]
+        print(f"Feature {feat_n}, {explanation=}")
+
+        # Simulate and score the explanation.
+        format = PromptFormat.HARMONY_V4 if SIMULATOR_MODEL_NAME == "gpt-3.5-turbo" else PromptFormat.INSTRUCTION_FOLLOWING
+        simulator = UncalibratedNeuronSimulator(
+            ExplanationNeuronSimulator(
+                SIMULATOR_MODEL_NAME,
+                explanation,
+                max_concurrent=MAX_CONCURRENT,
+                prompt_format=format,
+            )
+        )
+        scored_simulation = await simulate_and_score(simulator, valid_activation_records)
+        score = scored_simulation.get_preferred_score()
+        assert len(scored_simulation.scored_sequence_simulations) == 10
+        top_only_score = aggregate_scored_sequence_simulations(
+            scored_simulation.scored_sequence_simulations[:5]
+        ).get_preferred_score()
+        random_only_score = aggregate_scored_sequence_simulations(
+            scored_simulation.scored_sequence_simulations[5:]
+        ).get_preferred_score()
+        print(
+            f"Feature {feat_n}, score={score:.2f}, top_only_score={top_only_score:.2f}, random_only_score={random_only_score:.2f}"
+        )
+
+        feature_name = f"feature_{feat_n}"
+        feature_folder = os.path.join(save_folder, feature_name)
+        os.makedirs(feature_folder, exist_ok=True)
+        pickle.dump(
+            scored_simulation,
+            open(os.path.join(feature_folder, "scored_simulation.pkl"), "wb"),
+        )
+        pickle.dump(neuron_record, open(os.path.join(feature_folder, "neuron_record.pkl"), "wb"))
+        # write a file with the explanation and the score
+        with open(os.path.join(feature_folder, "explanation.txt"), "w") as f:
+            f.write(
+                f"{explanation}\nScore: {score:.2f}\nExplainer model: {EXPLAINER_MODEL_NAME}\nSimulator model: {SIMULATOR_MODEL_NAME}\n"
+            )
+            f.write(f"Top only score: {top_only_score:.2f}\n")
+            f.write(f"Random only score: {random_only_score:.2f}\n")
+
+
+def run(dict: MLP, cfg: InterpArgs):
+    assert cfg.df_n_feats >= cfg.n_feats_explain
+    df = get_df(
+        feature_dict=dict,
+        model_name=cfg.model_name,
+        layer=cfg.layer,
+        layer_loc=cfg.layer_loc,
+        n_feats=cfg.df_n_feats,
+        save_loc=cfg.save_loc,
+        device=cfg.device,
+    )
+    asyncio.run(interpret(df, cfg.save_loc, n_feats_to_explain=cfg.n_feats_explain))
+
+
+
 if __name__ == "__main__":
     layer = 1
     d_model = 512
@@ -259,24 +398,35 @@ if __name__ == "__main__":
 
 
     model_name = "EleutherAI/pythia-70m-deduped"
-    layer_loc = "residual"
+    layer_loc = "mlpin"
     n_feats = 100
     save_loc = os.path.join(mlp_dir, f"layer_{layer}_activations")
-    device = "cpu"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     force_refresh = False
 
-    # Get DataFrame
-    base_df = get_df(
-        mlp,
-        model_name,
-        layer,
-        layer_loc,
-        n_feats,
-        save_loc,
-        device,
-        force_refresh
+    cfg = InterpArgs(
+        layer=layer,
+        model_name=model_name,
+        layer_loc=layer_loc,
+        n_feats_explain=n_feats,
+        save_loc=save_loc,
+        device=device,
+        df_n_feats=n_feats,
     )
 
-    # Display the first few rows
-    print(base_df.head())
+    run(mlp, cfg)
+
+    # # Get DataFrame
+    # base_df = get_df(
+    #     mlp,
+    #     model_name,
+    #     layer,
+    #     layer_loc,
+    #     n_feats,
+    #     save_loc,
+    #     device,
+    #     force_refresh
+    # )
+    # # Display the first few rows
+    # print(base_df.head())
 
