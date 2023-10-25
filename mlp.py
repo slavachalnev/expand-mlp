@@ -105,3 +105,18 @@ class SoluMLP(nn.Module):
 
         h = self.fc2(h)
         return h
+
+
+class Identity(nn.Module):
+    def __init__(self, size):
+        self.input_size = size
+        self.hidden_size = size
+        self.output_size = size
+        super().__init__()
+    
+    def forward(self, x):
+        return x
+    
+    def encode(self, x):
+        return x
+    
