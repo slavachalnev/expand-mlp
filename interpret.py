@@ -22,6 +22,8 @@ import torch.nn as nn
 from datasets import load_dataset
 from transformer_lens import HookedTransformer
 
+from tqdm import tqdm
+
 mp.set_start_method("spawn", force=True)
 
 from neuron_explainer.activations.activation_records import \
@@ -38,7 +40,7 @@ from neuron_explainer.explanations.scoring import (
 from neuron_explainer.explanations.simulator import ExplanationNeuronSimulator
 from neuron_explainer.fast_dataclasses import loads
 
-from mlp import ReluMLP, MLP
+from mlp import ReluMLP, MLP, Identity
 from config import InterpArgs
 
 
@@ -76,6 +78,40 @@ def make_tensor_name(layer: int, layer_loc: str) -> str:
         tensor_name = f"blocks.{layer}.ln2.hook_normalized"
 
     return tensor_name
+
+
+def select_active_neurons(model, learned_dict, layer, layer_loc, device="cpu", n_examples=100):
+    active_neurons = set()
+    
+    model.to(device)
+    model.eval()
+    learned_dict.to(device)
+
+    tensor_name = make_tensor_name(layer, layer_loc)
+    sentence_dataset = load_dataset("openwebtext", split="train", streaming=True, )
+    iter_dataset = iter(sentence_dataset)
+
+    with torch.no_grad():
+        for _ in tqdm(range(n_examples)):
+            sentence = next(iter_dataset)
+            sentence_tokens = model.to_tokens(sentence["text"], prepend_bos=False).to(device)
+            sentence_tokens = sentence_tokens[:, :50] # first 50 tokens
+            _, cache = model.run_with_cache(sentence_tokens)
+            mlp_activation_data = cache[tensor_name].to(device)
+            feature_activation_data = learned_dict.encode(mlp_activation_data)[0]
+            # feature_activation_data has shape (n_tokens, n_features)
+            for i in range(feature_activation_data.shape[1]):
+                if torch.max(feature_activation_data[:, i]) > 0:
+                    active_neurons.add(i)
+            
+            non_zero = []
+            for pos in range(sentence_tokens.shape[1]):
+                non_zero.append(torch.count_nonzero(feature_activation_data[pos, :]).item())
+            print(non_zero)
+
+    
+    return list(active_neurons)
+
 
 
 def make_feature_activation_dataset(
@@ -525,16 +561,20 @@ def read_results(base_dir: str, activation_name: str, score_mode: str) -> None:
 if __name__ == "__main__":
     layer = 1
     d_model = 512
-    expansion_factor = 8  # 8 times as many features as neurons in original layer.
+    expansion_factor = 4
 
     mlp = ReluMLP(d_model, d_model*4*expansion_factor, d_model)
-    mlp_dir = "mlps/2023-10-15_10-31-52"
-    mlp.load_state_dict(torch.load(os.path.join(mlp_dir, f"mlp_16384_layer_{layer}.pt")))
+    mlp_dir = "mlps/2023-10-24_10-11-56"
+    mlp.load_state_dict(torch.load(os.path.join(mlp_dir, f"mlp_8192_layer_{layer}.pt")))
+    layer_loc = "mlpin"
+
+    # mlp_dir = "mlps/id"
+    # mlp = Identity(size=d_model*4)
+    # layer_loc = "mlp"
 
 
     model_name = "EleutherAI/pythia-70m-deduped"
-    layer_loc = "mlpin"
-    n_feats = 100
+    n_feats = 40
     save_loc = os.path.join(mlp_dir, f"layer_{layer}_activations")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     force_refresh = False
@@ -549,8 +589,13 @@ if __name__ == "__main__":
         df_n_feats=n_feats,
     )
 
+    # model = HookedTransformer.from_pretrained(model_name, device=device)
+    # active = select_active_neurons(model, mlp, layer, layer_loc, device=device)
+    # print(f"len active: {len(active)}")
+
+
     # run(mlp, cfg)
 
-    read_results(mlp_dir, f"layer_{layer}_activations", "top_random")
+    read_results(mlp_dir, f"layer_{layer}_activations", "top")
 
 
